@@ -13,8 +13,8 @@ import java.util.zip.GZIPOutputStream;
 public class Main {
     private static final int MAGIC_CODE = 0x89ABCDEF;
     private static HashMap<String, Object> args = new HashMap<>();
-    private static boolean isOracle = false;
-    private static boolean isMySQL = false;
+//    private static boolean isOracle = false;
+//    private static boolean isMySQL = false;
 
     private static int _limit = Integer.MAX_VALUE;
     private static int _feedback = 10000;
@@ -28,8 +28,11 @@ public class Main {
         SmallString,
         MediumString,
         LongString,
-        DATE,
-        DATETIME;
+        Date,
+        DateTime,
+        SmallBinary,
+        MediumBinary,
+        LongBinary;
 
         public static FieldType fromInt(int v) {
             if(v == Integer.ordinal())
@@ -44,10 +47,16 @@ public class Main {
                 return MediumString;
             else if(v == LongString.ordinal())
                 return LongString;
-            else if(v == DATE.ordinal())
-                return DATE;
-            else if(v == DATETIME.ordinal())
-                return DATETIME;
+            else if(v == Date.ordinal())
+                return Date;
+            else if(v == DateTime.ordinal())
+                return DateTime;
+            else if(v == SmallBinary.ordinal())
+                return SmallBinary;
+            else if(v == MediumBinary.ordinal())
+                return MediumBinary;
+            else if(v == LongBinary.ordinal())
+                return LongBinary;
             else
                 return null;
         }
@@ -113,13 +122,13 @@ public class Main {
 
         String jdbc = null;
         if(args.get("type").toString().equalsIgnoreCase("oracle")) {
-            isOracle = true;
+//            isOracle = true;
             Class.forName("oracle.jdbc.OracleDriver");
             jdbc = String.format("jdbc:oracle:thin:@%s:%s", args.get("host"), args.get("db"));
             System.out.println(String.format("Oracle: %s", jdbc));
         }
         else if(args.get("type").toString().equalsIgnoreCase("mysql")) {
-            isMySQL = true;
+//            isMySQL = true;
             Class.forName("com.mysql.cj.jdbc.Driver");
             jdbc = String.format("jdbc:mysql://%s/%s?useSSL=false&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=UTF-8&zeroDateTimeBehavior=convertToNull", args.get("host"), args.get("db"));
             System.out.println(String.format("MySQL: %s", jdbc));
@@ -213,10 +222,21 @@ public class Main {
                     fieldTypes[i] = FieldType.LongString;
                     break;
                 case Types.DATE:
-                    fieldTypes[i] = FieldType.DATE;
+                    fieldTypes[i] = FieldType.Date;
                     break;
                 case Types.TIMESTAMP:
-                    fieldTypes[i] = FieldType.DATETIME;
+                    fieldTypes[i] = FieldType.DateTime;
+                    break;
+                case Types.VARBINARY:
+                    if(prec <= Byte.MAX_VALUE)
+                        fieldTypes[i] = FieldType.SmallBinary;
+                    else if(prec <= Short.MAX_VALUE)
+                        fieldTypes[i] = FieldType.MediumBinary;
+                    else
+                        fieldTypes[i] = FieldType.LongBinary;
+                    break;
+                case Types.LONGVARBINARY:
+                    fieldTypes[i] = FieldType.LongBinary;
                     break;
                 default:
                     System.out.println(String.format("Unsupport field data type: %d: %s", md.getColumnType(i + 1), md.getColumnTypeName(i + 1)));
@@ -271,11 +291,16 @@ public class Main {
                     case LongString:
                         writeString(chunk, fieldTypes[i], rs.getString(i + 1));
                         break;
-                    case DATE:
+                    case Date:
                         writeDate(chunk, rs.getTimestamp(i + 1));
                         break;
-                    case DATETIME:
+                    case DateTime:
                         writeDateTime(chunk, rs.getTimestamp(i + 1));
+                        break;
+                    case SmallBinary:
+                    case MediumBinary:
+                    case LongBinary:
+                        writeBinary(chunk, fieldTypes[i], rs.getBlob(i + 1));
                         break;
                     default:
                         assert false;
@@ -286,7 +311,7 @@ public class Main {
             batch += 1;
             rows += 1;
 
-            if(batch >= 1000) {
+            if(batch >= 1000 || chunk.size() >= 4 * 1024 * 1024) {
                 writeByte(chunk, (byte) StartFlag.EOF.ordinal());
                 byte[] data = compress(chunk.toByteArray());
                 writeByte(out, (byte) StartFlag.DataRow.ordinal());
@@ -371,6 +396,7 @@ public class Main {
                 sql.append("?");
             }
             sql.append(")");
+            System.out.println();
         }
         else {
             HashMap<String, Integer> map = new HashMap<>();
@@ -458,49 +484,46 @@ public class Main {
                     switch (fieldTypes[i]) {
                         case Integer:
                             wasNull = readByte(in);
-                            if(wasNull == 0) {
+                            if (wasNull == 0) {
                                 int iVal = readInteger(in);
-                                if(rows == _debugrow)
-                                    System.out.println(String.format("[%d]%s: %d", i+1, names[i], iVal));
-                                if(fieldsMap.containsKey(i))
+                                if (rows == _debugrow)
+                                    System.out.println(String.format("[%d]%s: %d", i + 1, names[i], iVal));
+                                if (fieldsMap.containsKey(i))
                                     ps.setInt(fieldsMap.get(i) + 1, iVal);
-                            }
-                            else {
-                                if(rows == _debugrow)
-                                    System.out.println(String.format("[%d]%s: null", i+1, names[i]));
-                                if(fieldsMap.containsKey(i))
+                            } else {
+                                if (rows == _debugrow)
+                                    System.out.println(String.format("[%d]%s: null", i + 1, names[i]));
+                                if (fieldsMap.containsKey(i))
                                     ps.setNull(fieldsMap.get(i) + 1, Types.INTEGER);
                             }
                             break;
                         case Long:
                             wasNull = readByte(in);
-                            if(wasNull == 0) {
+                            if (wasNull == 0) {
                                 long lVal = readLong(in);
-                                if(rows == _debugrow)
-                                    System.out.println(String.format("[%d]%s: %d", i+1, names[i], lVal));
-                                if(fieldsMap.containsKey(i))
+                                if (rows == _debugrow)
+                                    System.out.println(String.format("[%d]%s: %d", i + 1, names[i], lVal));
+                                if (fieldsMap.containsKey(i))
                                     ps.setLong(fieldsMap.get(i) + 1, lVal);
-                            }
-                            else {
-                                if(rows == _debugrow)
-                                    System.out.println(String.format("[%d]%s: null", i+1, names[i]));
-                                if(fieldsMap.containsKey(i))
+                            } else {
+                                if (rows == _debugrow)
+                                    System.out.println(String.format("[%d]%s: null", i + 1, names[i]));
+                                if (fieldsMap.containsKey(i))
                                     ps.setNull(fieldsMap.get(i) + 1, Types.BIGINT);
                             }
                             break;
                         case Double:
                             wasNull = readByte(in);
-                            if(wasNull == 0) {
+                            if (wasNull == 0) {
                                 double fVal = readDouble(in);
-                                if(rows == _debugrow)
-                                    System.out.println(String.format("[%d]%s: %f", i+1, names[i], fVal));
-                                if(fieldsMap.containsKey(i))
+                                if (rows == _debugrow)
+                                    System.out.println(String.format("[%d]%s: %f", i + 1, names[i], fVal));
+                                if (fieldsMap.containsKey(i))
                                     ps.setDouble(fieldsMap.get(i) + 1, fVal);
-                            }
-                            else {
-                                if(rows == _debugrow)
-                                    System.out.println(String.format("[%d]%s: null", i+1, names[i]));
-                                if(fieldsMap.containsKey(i))
+                            } else {
+                                if (rows == _debugrow)
+                                    System.out.println(String.format("[%d]%s: null", i + 1, names[i]));
+                                if (fieldsMap.containsKey(i))
                                     ps.setNull(fieldsMap.get(i) + 1, Types.DECIMAL);
                             }
                             break;
@@ -508,32 +531,52 @@ public class Main {
                         case MediumString:
                         case LongString:
                             String sVal = readString(in, fieldTypes[i]);
-                            if(rows == _debugrow)
-                                System.out.println(String.format("[%d]%s: %s", i+1, names[i], sVal));
-                            if(fieldsMap.containsKey(i))
+                            if (rows == _debugrow)
+                                System.out.println(String.format("[%d]%s: %s", i + 1, names[i], sVal));
+                            if (fieldsMap.containsKey(i))
                                 ps.setString(fieldsMap.get(i) + 1, sVal);
                             break;
-                        case DATE:
+                        case Date:
                             Date dateVal = readDate(in);
-                            if(rows == _debugrow) {
-                                if(dateVal != null)
+                            if (rows == _debugrow) {
+                                if (dateVal != null)
                                     System.out.println(String.format("[%d]%s: %s", i + 1, names[i], new SimpleDateFormat("yyyy-MM-dd").format(dateVal)));
                                 else
                                     System.out.println(String.format("[%d]%s: null", i + 1, names[i]));
                             }
-                            if(fieldsMap.containsKey(i))
+                            if (fieldsMap.containsKey(i))
                                 ps.setDate(fieldsMap.get(i) + 1, dateVal != null ? new java.sql.Date(dateVal.getTime()) : null);
                             break;
-                        case DATETIME:
+                        case DateTime:
                             Date dtVal = readDateTime(in);
-                            if(rows == _debugrow) {
-                                if(dtVal != null)
+                            if (rows == _debugrow) {
+                                if (dtVal != null)
                                     System.out.println(String.format("[%d]%s: %s", i + 1, names[i], new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(dtVal)));
                                 else
                                     System.out.println(String.format("[%d]%s: null", i + 1, names[i]));
                             }
-                            if(fieldsMap.containsKey(i))
+                            if (fieldsMap.containsKey(i))
                                 ps.setTimestamp(fieldsMap.get(i) + 1, dtVal != null ? new Timestamp(dtVal.getTime()) : null);
+                            break;
+                        case SmallBinary:
+                        case MediumBinary:
+                        case LongBinary:
+                            byte[] blob_data = readBinary(in, fieldTypes[i]);
+                            if (rows == _debugrow) {
+                                if (blob_data != null)
+                                    System.out.println(String.format("[%d]%s: <%d bytes>", i + 1, names[i], blob_data.length));
+                                else
+                                    System.out.println(String.format("[%d]%s: null", i + 1, names[i]));
+                            }
+                            if (fieldsMap.containsKey(i)) {
+                                if (blob_data == null)
+                                    ps.setNull(fieldsMap.get(i) + 1, Types.VARBINARY);
+                                else {
+                                    Blob blob = conn.createBlob();
+                                    blob.setBytes(1, blob_data);
+                                    ps.setBlob(fieldsMap.get(i) + 1, blob);
+                                }
+                            }
                             break;
                     }
                 }
@@ -708,6 +751,72 @@ public class Main {
             return null;
         else
             return new Date(x);
+    }
+
+    private static void writeBinary(OutputStream out, FieldType type, Blob blob) throws IOException, SQLException {
+        if(blob == null) {
+            switch (type) {
+                case SmallBinary:
+                    writeByte(out, (byte) 0);
+                    break;
+                case MediumBinary:
+                    writeShort(out, (short) 0);
+                    break;
+                case LongBinary:
+                    writeInteger(out, 0);
+                    break;
+            }
+        }
+        else {
+            InputStream is = blob.getBinaryStream();
+            int len = is.available();
+            switch (type) {
+                case SmallBinary:
+                    writeByte(out, (byte) len);
+                    break;
+                case MediumBinary:
+                    writeShort(out, (short) len);
+                    break;
+                case LongBinary:
+                    writeInteger(out, len);
+                    break;
+            }
+
+            if(len > 0) {
+                byte[] bytes = new byte[4096];
+                while(len > 0) {
+                    int n = is.read(bytes);
+                    if(n == -1)
+                        break;
+                    if(n > 0) {
+                        len -= n;
+                        out.write(bytes, 0, n);
+                    }
+                }
+            }
+        }
+    }
+
+    private static byte[] readBinary(InputStream in, FieldType type) throws IOException {
+        int len = 0;
+        switch (type) {
+            case SmallBinary:
+                len = readByte(in);
+                break;
+            case MediumBinary:
+                len = readShort(in);
+                break;
+            case LongBinary:
+                len = readInteger(in);
+                break;
+        }
+
+        if(len == 0)
+            return null;
+
+        byte[] bytes = new byte[len];
+        in.read(bytes);
+        return bytes;
     }
 
     private static String getTimestamp() {
