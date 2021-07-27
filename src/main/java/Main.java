@@ -161,8 +161,7 @@ public class Main {
             String s = args.get("where").toString();
             if(!s.startsWith("where") && !s.startsWith("WHERE"))
                 sql.append("where ");
-            else
-                sql.append(s);
+            sql.append(s);
         }
         System.out.println(String.format("SQL: %s", sql.toString()));
 
