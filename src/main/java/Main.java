@@ -5,8 +5,11 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 
 public class Main {
+    private static final int MAGIC_CODE = 0x89ABCDEF;
     private static HashMap<String, Object> args = new HashMap<>();
     private static boolean isOracle = false;
     private static boolean isMySQL = false;
@@ -115,7 +118,7 @@ public class Main {
         else if(args.get("type").toString().equalsIgnoreCase("mysql")) {
             isMySQL = true;
             Class.forName("com.mysql.cj.jdbc.Driver");
-            jdbc = String.format("jdbc:mysql://%s/%s?useSSL=false&useUnicode=true&characterEncoding=UTF-8&zeroDateTimeBehavior=convertToNull", args.get("host"), args.get("db"));
+            jdbc = String.format("jdbc:mysql://%s/%s?useSSL=false&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=UTF-8&zeroDateTimeBehavior=convertToNull", args.get("host"), args.get("db"));
             System.out.println(String.format("MySQL: %s", jdbc));
         }
         else
@@ -170,6 +173,9 @@ public class Main {
 
 
         FileOutputStream out = new FileOutputStream(args.get("output").toString());
+
+        //写标识
+        writeInteger(out, MAGIC_CODE);
 
         //写列数量
         writeByte(out, (byte) StartFlag.FieldInfo.ordinal());
@@ -227,48 +233,51 @@ public class Main {
 
         System.out.println(String.format("%s Start ...", getTimestamp()));
 
+        int batch = 0;
+        ByteArrayOutputStream chunk = new ByteArrayOutputStream();
+
         while (rs.next()) {
-            writeByte(out, (byte) StartFlag.DataRow.ordinal());
+            writeByte(chunk, (byte) StartFlag.DataRow.ordinal());
 
             for(int i=0; i<fieldTypes.length; i++) {
                 switch (fieldTypes[i]) {
                     case Integer:
                         int iVal = rs.getInt(i + 1);
                         if(rs.wasNull())
-                            out.write(1);
+                            chunk.write(1);
                         else {
-                            out.write(0);
-                            writeInteger(out, iVal);
+                            chunk.write(0);
+                            writeInteger(chunk, iVal);
                         }
                         break;
                     case Long:
                         long lVal = rs.getLong(i + 1);
                         if(rs.wasNull())
-                            out.write(1);
+                            chunk.write(1);
                         else {
-                            out.write(0);
-                            writeLong(out, lVal);
+                            chunk.write(0);
+                            writeLong(chunk, lVal);
                         }
                         break;
                     case Double:
                         double fVal = rs.getDouble(i + 1);
                         if(rs.wasNull())
-                            out.write(1);
+                            chunk.write(1);
                         else {
-                            out.write(0);
-                            writeDouble(out, fVal);
+                            chunk.write(0);
+                            writeDouble(chunk, fVal);
                         }
                         break;
                     case SmallString:
                     case MediumString:
                     case LongString:
-                        writeString(out, fieldTypes[i], rs.getString(i + 1));
+                        writeString(chunk, fieldTypes[i], rs.getString(i + 1));
                         break;
                     case DATE:
-                        writeDate(out, rs.getTimestamp(i + 1));
+                        writeDate(chunk, rs.getTimestamp(i + 1));
                         break;
                     case DATETIME:
-                        writeDateTime(out, rs.getTimestamp(i + 1));
+                        writeDateTime(chunk, rs.getTimestamp(i + 1));
                         break;
                     default:
                         assert false;
@@ -276,12 +285,33 @@ public class Main {
 
             }
 
+            batch += 1;
             rows += 1;
+
+            if(batch >= 1000) {
+                writeByte(chunk, (byte) StartFlag.EOF.ordinal());
+                byte[] data = compress(chunk.toByteArray());
+                writeByte(out, (byte) StartFlag.DataRow.ordinal());
+                writeInteger(out, data.length);
+                out.write(data);
+
+                batch = 0;
+                chunk.reset();
+            }
+
             if((rows % ((Number)args.get("feedback")).intValue()) == 0) {
                 System.out.println(String.format("%s %d rows ...", getTimestamp(), rows));
             }
             if(rows >= ((Number)args.get("limit")).intValue())
                 break;
+        }
+
+        if(batch > 0) {
+            writeByte(chunk, (byte) StartFlag.EOF.ordinal());
+            byte[] data = compress(chunk.toByteArray());
+            writeByte(out, (byte) StartFlag.DataRow.ordinal());
+            writeInteger(out, data.length);
+            out.write(data);
         }
 
         writeByte(out, (byte) StartFlag.EOF.ordinal());
@@ -301,17 +331,24 @@ public class Main {
         byte flag;
         HashMap<Integer, Integer> fieldsMap = new HashMap<>();
 
-        FileInputStream in = new FileInputStream(args.get("input").toString());
+        FileInputStream ins = new FileInputStream(args.get("input").toString());
+
+        //读标识符
+        if(readInteger(ins) != MAGIC_CODE) {
+            System.err.println("Invalid data format");
+            ins.close();
+            return;
+        }
 
         //读列数量
-        flag = (byte) readByte(in);
-        fieldTypes = new FieldType[readShort(in)];
+        flag = (byte) readByte(ins);
+        fieldTypes = new FieldType[readShort(ins)];
         names = new String[fieldTypes.length];
 
         //读列类型和列名
         for(int i=0; i<fieldTypes.length; i++) {
-            fieldTypes[i] = FieldType.fromInt(readByte(in));
-            names[i] = readString(in, FieldType.SmallString);
+            fieldTypes[i] = FieldType.fromInt(readByte(ins));
+            names[i] = readString(ins, FieldType.SmallString);
         }
 
         StringBuilder sql = new StringBuilder();
@@ -367,7 +404,7 @@ public class Main {
                 }
                 else {
                     System.err.println(String.format("The data file not contain field \"%s\"", parts[0]));
-                    in.close();
+                    ins.close();
                     return;
                 }
             }
@@ -382,7 +419,7 @@ public class Main {
         }
 
         if(((Number)args.get("limit")).intValue() == 0) {
-            in.close();
+            ins.close();
             return;
         }
 
@@ -394,11 +431,26 @@ public class Main {
 
         try {
             int batch = 0;
+            ByteArrayInputStream in = new ByteArrayInputStream(new byte[StartFlag.EOF.ordinal()]);
 
             for (; ; ) {
+                //读取缓冲区
                 flag = (byte) readByte(in);
-                if (flag != StartFlag.DataRow.ordinal())
-                    break;
+                if (flag != StartFlag.DataRow.ordinal()) {
+                    //缓冲区为空，从文件读取下一缓冲区
+                    flag = (byte)readByte(ins);
+                    if(flag != StartFlag.DataRow.ordinal())
+                        break;
+
+                    int comp_data_len = readInteger(ins);
+                    byte[] comp_data = new byte[comp_data_len];
+                    ins.read(comp_data);
+                    byte[] umcomp_data = uncompress(comp_data);
+                    in = new ByteArrayInputStream(umcomp_data);
+
+                    //读取缓冲区
+                    flag = (byte) readByte(in);
+                }
 
                 rows += 1;
                 batch += 1;
@@ -517,7 +569,7 @@ public class Main {
             ps.close();
         }
 
-        in.close();
+        ins.close();
 
         System.out.println(String.format("%s Total: %d rows", getTimestamp(), rows));
     }
@@ -662,6 +714,40 @@ public class Main {
 
     private static String getTimestamp() {
         return new SimpleDateFormat("HH:mm:ss").format(Calendar.getInstance().getTime());
+    }
+
+
+    public static byte[] compress(byte[] bytes) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        GZIPOutputStream gzip;
+        try {
+            gzip = new GZIPOutputStream(out);
+            gzip.write(bytes);
+            gzip.close();
+        } catch (IOException e) {
+            throw e;
+        }
+        return out.toByteArray();
+    }
+
+    public static byte[] uncompress(byte[] bytes) throws IOException {
+        if (bytes == null || bytes.length == 0) {
+            return null;
+        }
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ByteArrayInputStream in = new ByteArrayInputStream(bytes);
+        try {
+            GZIPInputStream ungzip = new GZIPInputStream(in);
+            byte[] buffer = new byte[256];
+            int n;
+            while ((n = ungzip.read(buffer)) >= 0) {
+                out.write(buffer, 0, n);
+            }
+        } catch (IOException e) {
+            throw e;
+        }
+
+        return out.toByteArray();
     }
 }
 
