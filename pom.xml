@@ -61,7 +61,7 @@
                         <!--不做收缩（删除注释、未被引用代码）-->
                         <option>-dontshrink</option>
                         <!--不做优化（变更代码实现逻辑）-->
-                        <option>-dontoptimize</option>
+<!--                        <option>-dontoptimize</option>-->
                         <!--不路过非公用类文件及成员-->
                         <option>-dontskipnonpubliclibraryclasses</option>
                         <option>-dontskipnonpubliclibraryclassmembers</option>
@@ -72,28 +72,28 @@
                         <!--不混淆所有包名，Spring配置中有大量固定写法的包名-->
                         <option>-keeppackagenames</option>
                         <!--不混淆所有特殊的类-->
-<!--                        <option>-->
-<!--                            -keepattributes-->
-<!--                            Exceptions,InnerClasses,Signature,Deprecated,SourceFile,LineNumberTable,LocalVariable*Table,*Annotation*,Synthetic,EnclosingMethod-->
-<!--                        </option>-->
+                        <option>
+                            -keepattributes
+                            Exceptions,InnerClasses,Signature,Deprecated,SourceFile,LineNumberTable,LocalVariable*Table,*Annotation*,Synthetic,EnclosingMethod
+                        </option>
                         <!--不混淆所有的set/get方法，毕竟项目中使用的部分第三方框架（例如Shiro）会用到大量的set/get映射-->
                         <!--  <option>-keepclassmembers public class *{void set*(***);*** get*();}
                           </option>-->
-                        <option>-keepparameternames</option>
+<!--                        <option>-keepparameternames</option>-->
                         <option>-dontusemixedcaseclassnames</option>
-<!--                        <option>-keep,includedescriptorclasses class Main {-->
-<!--                            public static void main(***);-->
-<!--                            }-->
-<!--                        </option>-->
-                        <option>
-                            -keep,includedescriptorclasses enum ** {
-                            &lt;fields&gt;;
-                            public static **[] values();
-                            public static ** valueOf(java.lang.String);
+                        <option>-keep,includedescriptorclasses class com.etingyu.dbtool.Main {
+                            public static void main(***);
                             }
                         </option>
+<!--                        <option>-->
+<!--                            -keep,includedescriptorclasses enum ** {-->
+<!--                            &lt;fields&gt;;-->
+<!--                            public static **[] values();-->
+<!--                            public static ** valueOf(java.lang.String);-->
+<!--                            }-->
+<!--                        </option>-->
                         <!--不显示警告信息，如果显示则会出现Error无法完成混淆！-->
-                        <option>-dontwarn **</option>
+<!--                        <option>-dontwarn **</option>-->
                     </options>
                     <outjar>${project.artifactId}-${project.version}-pg.jar</outjar>
                     <!--添加依赖，这里你可以按你的需要修改，这里测试只需要一个JRE的Runtime包就行了-->
@@ -121,6 +121,34 @@
             </plugin>
 
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>1.7</version>
+                <executions>
+                    <execution>
+                        <id>unpack-jar-features</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <delete includeEmptyDirs="true">
+                                    <fileset dir="${project.build.directory}/classes" includes="**/*"/>
+                                </delete>
+                                <unzip dest="${project.build.directory}/classes">
+                                    <fileset dir="${project.build.directory}">
+                                        <include name="${project.artifactId}-${project.version}-pg.jar"/>
+                                    </fileset>
+                                </unzip>
+                                <delete file="${project.build.directory}/${project.artifactId}-${project.version}-pg.jar"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
                 <artifactId>maven-assembly-plugin</artifactId>
                 <configuration>
                     <appendAssemblyId>false</appendAssemblyId>
@@ -129,7 +157,7 @@
                     </descriptorRefs>
                     <archive>
                         <manifest>
-                            <mainClass>Main</mainClass>
+                            <mainClass>com.etingyu.dbtool.Main</mainClass>
                         </manifest>
                     </archive>
                 </configuration>

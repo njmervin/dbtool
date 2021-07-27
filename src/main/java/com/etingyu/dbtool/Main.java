@@ -1,3 +1,5 @@
+package com.etingyu.dbtool;
+
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.sql.*;
@@ -13,6 +15,11 @@ public class Main {
     private static HashMap<String, Object> args = new HashMap<>();
     private static boolean isOracle = false;
     private static boolean isMySQL = false;
+
+    private static int _limit = Integer.MAX_VALUE;
+    private static int _feedback = 10000;
+    private static int _batch = 1000;
+    private static int _debugrow = 0;
 
     enum FieldType {
         Integer,
@@ -98,15 +105,11 @@ public class Main {
     }
 
     private static void process() throws Exception {
-        if(!args.containsKey("limit"))
-            args.put("limit", Integer.MAX_VALUE);
-        else
-            args.put("limit", Integer.valueOf(args.get("limit").toString()));
+        if(args.containsKey("limit"))
+            _limit = Integer.valueOf(args.get("limit").toString());
 
-        if(!args.containsKey("feedback"))
-            args.put("feedback", 10000);
-        else
-            args.put("feedback", Integer.valueOf(args.get("feedback").toString()));
+        if(args.containsKey("feedback"))
+            _feedback = Integer.valueOf(args.get("feedback").toString());
 
         String jdbc = null;
         if(args.get("type").toString().equalsIgnoreCase("oracle")) {
@@ -128,15 +131,11 @@ public class Main {
         if(args.get("action").toString().equalsIgnoreCase("export"))
             export(conn);
         else if(args.get("action").toString().equalsIgnoreCase("import")) {
-            if(!args.containsKey("batch"))
-                args.put("batch", 1000);
-            else
-                args.put("batch", Integer.valueOf(args.get("batch").toString()));
+            if(args.containsKey("batch"))
+                _batch = Integer.parseInt(args.get("batch").toString());
 
-            if(!args.containsKey("debugrow"))
-                args.put("debugrow", 0);
-            else
-                args.put("debugrow", Integer.valueOf(args.get("debugrow").toString()));
+            if(args.containsKey("debugrow"))
+                _debugrow = Integer.parseInt(args.get("debugrow").toString());
 
             _import(conn);
         }
@@ -298,10 +297,10 @@ public class Main {
                 chunk.reset();
             }
 
-            if((rows % ((Number)args.get("feedback")).intValue()) == 0) {
+            if((rows % _feedback) == 0) {
                 System.out.println(String.format("%s %d rows ...", getTimestamp(), rows));
             }
-            if(rows >= ((Number)args.get("limit")).intValue())
+            if(rows >= _limit)
                 break;
         }
 
@@ -417,7 +416,7 @@ public class Main {
             sql.append(")");
         }
 
-        if(((Number)args.get("limit")).intValue() == 0) {
+        if(_limit == 0) {
             ins.close();
             return;
         }
@@ -461,13 +460,13 @@ public class Main {
                             wasNull = readByte(in);
                             if(wasNull == 0) {
                                 int iVal = readInteger(in);
-                                if(rows == ((Number)args.get("debugrow")).intValue())
+                                if(rows == _debugrow)
                                     System.out.println(String.format("[%d]%s: %d", i+1, names[i], iVal));
                                 if(fieldsMap.containsKey(i))
                                     ps.setInt(fieldsMap.get(i) + 1, iVal);
                             }
                             else {
-                                if(rows == ((Number)args.get("debugrow")).intValue())
+                                if(rows == _debugrow)
                                     System.out.println(String.format("[%d]%s: null", i+1, names[i]));
                                 if(fieldsMap.containsKey(i))
                                     ps.setNull(fieldsMap.get(i) + 1, Types.INTEGER);
@@ -477,13 +476,13 @@ public class Main {
                             wasNull = readByte(in);
                             if(wasNull == 0) {
                                 long lVal = readLong(in);
-                                if(rows == ((Number)args.get("debugrow")).intValue())
+                                if(rows == _debugrow)
                                     System.out.println(String.format("[%d]%s: %d", i+1, names[i], lVal));
                                 if(fieldsMap.containsKey(i))
                                     ps.setLong(fieldsMap.get(i) + 1, lVal);
                             }
                             else {
-                                if(rows == ((Number)args.get("debugrow")).intValue())
+                                if(rows == _debugrow)
                                     System.out.println(String.format("[%d]%s: null", i+1, names[i]));
                                 if(fieldsMap.containsKey(i))
                                     ps.setNull(fieldsMap.get(i) + 1, Types.BIGINT);
@@ -493,13 +492,13 @@ public class Main {
                             wasNull = readByte(in);
                             if(wasNull == 0) {
                                 double fVal = readDouble(in);
-                                if(rows == ((Number)args.get("debugrow")).intValue())
+                                if(rows == _debugrow)
                                     System.out.println(String.format("[%d]%s: %f", i+1, names[i], fVal));
                                 if(fieldsMap.containsKey(i))
                                     ps.setDouble(fieldsMap.get(i) + 1, fVal);
                             }
                             else {
-                                if(rows == ((Number)args.get("debugrow")).intValue())
+                                if(rows == _debugrow)
                                     System.out.println(String.format("[%d]%s: null", i+1, names[i]));
                                 if(fieldsMap.containsKey(i))
                                     ps.setNull(fieldsMap.get(i) + 1, Types.DECIMAL);
@@ -509,14 +508,14 @@ public class Main {
                         case MediumString:
                         case LongString:
                             String sVal = readString(in, fieldTypes[i]);
-                            if(rows == ((Number)args.get("debugrow")).intValue())
+                            if(rows == _debugrow)
                                 System.out.println(String.format("[%d]%s: %s", i+1, names[i], sVal));
                             if(fieldsMap.containsKey(i))
                                 ps.setString(fieldsMap.get(i) + 1, sVal);
                             break;
                         case DATE:
                             Date dateVal = readDate(in);
-                            if(rows == ((Number)args.get("debugrow")).intValue()) {
+                            if(rows == _debugrow) {
                                 if(dateVal != null)
                                     System.out.println(String.format("[%d]%s: %s", i + 1, names[i], new SimpleDateFormat("yyyy-MM-dd").format(dateVal)));
                                 else
@@ -527,7 +526,7 @@ public class Main {
                             break;
                         case DATETIME:
                             Date dtVal = readDateTime(in);
-                            if(rows == ((Number)args.get("debugrow")).intValue()) {
+                            if(rows == _debugrow) {
                                 if(dtVal != null)
                                     System.out.println(String.format("[%d]%s: %s", i + 1, names[i], new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(dtVal)));
                                 else
@@ -541,16 +540,16 @@ public class Main {
 
                 ps.addBatch();
 
-                if(batch >= ((Number) args.get("batch")).intValue()) {
+                if(batch >= _batch) {
                     ps.executeBatch();
                     conn.commit();
                     batch = 0;
                 }
 
-                if ((rows % ((Number) args.get("feedback")).intValue()) == 0) {
+                if ((rows % _feedback) == 0) {
                     System.out.println(String.format("%s %d rows ...", getTimestamp(), rows));
                 }
-                if (rows >= ((Number) args.get("limit")).intValue())
+                if (rows >= _limit)
                     break;
             }
 
