@@ -209,6 +209,7 @@ public class Main {
                         fieldTypes[i] = FieldType.Double;
                     }
                     break;
+                case Types.CHAR:
                 case Types.VARCHAR:
                     if(prec <= Byte.MAX_VALUE)
                         fieldTypes[i] = FieldType.SmallString;
