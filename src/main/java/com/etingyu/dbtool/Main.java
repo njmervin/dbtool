@@ -95,6 +95,14 @@ public class Main {
      *      --batch N
      *      --debugrow N
      *      --input destfile
+     *
+     * exec
+     *      --type oracle
+     *      --host 127.0.0.1:1521
+     *      --db orcl
+     *      --user test
+     *      --pass test
+     *      --sql "update sql"
      */
     public static void main(String[] _args) throws Exception {
         for(int i=0; i<_args.length; i++) {
@@ -148,6 +156,8 @@ public class Main {
 
             _import(conn);
         }
+        else if(args.get("action").toString().equalsIgnoreCase("exec"))
+            exec(conn);
         conn.close();
     }
 
@@ -614,6 +624,20 @@ public class Main {
         ins.close();
 
         System.out.println(String.format("%s Total: %d rows", getTimestamp(), rows));
+    }
+
+    private static void exec(Connection conn) throws SQLException {
+        String sql = (String) args.get("sql");
+        if(sql == null) {
+            System.out.println(String.format("%s no sql.", getTimestamp()));
+            return;
+        }
+
+        System.out.println(String.format("%s Start ...", getTimestamp()));
+        System.out.println(String.format("%s SQL: %s", getTimestamp(), sql));
+        Statement stmt = conn.createStatement();
+        int rows = stmt.executeUpdate(sql);
+        System.out.println(String.format("%s Affect %d rows.", getTimestamp(), rows));
     }
 
     private static void writeByte(OutputStream out, byte value) throws IOException {
