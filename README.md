@@ -38,6 +38,18 @@ java -jar dbtool-1.0.0.jar export --type oracle --host ***:*** --db orcl --user 
            --debugrow N                        # <可选> 设置输出第N行每列的详细数据
            --input destfile                    # 要导入的数据文件路径
 
-
 java -jar dbtool-1.0.0.jar import --type oracle --host ***:*** --db orcl --user *** --pass *** --table *** --batch 1000 --input "D:\data\***.dat
+```
+
+## 更新
+```sh
+     exec
+           --type oracle                       # 数据库类型：oracle / mysql
+           --host 127.0.0.1:1521               # 数据库地址
+           --db orcl                           # 数据库名称
+           --user test                         # 用户名
+           --pass test                         # 密码
+           --sql "execute sql"                 # 要执行的SQL语句
+
+java -jar dbtool-1.0.0.jar exec --type oracle --host ***:*** --db orcl --user *** --pass *** --sql "update ..."
 ```
