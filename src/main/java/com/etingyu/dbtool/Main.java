@@ -3,6 +3,7 @@ package com.etingyu.dbtool;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.sql.*;
+import java.text.DecimalFormat;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
@@ -163,6 +164,7 @@ public class Main {
     private static void export(Connection conn) throws SQLException, IOException {
         int rows = 0;
         long rows_offset = 0;
+        long actual_bytes = 0;
         FieldType[] fieldTypes = null;
 
 
@@ -265,9 +267,10 @@ public class Main {
             writeString(out, FieldType.SmallString, md.getColumnName(i + 1));
         }
 
-        //准备写行数
+        //准备写行数和数据量
         rows_offset = out.getFilePointer();
         writeInteger(out, 0);
+        writeLong(out, 0);
 
         System.out.println(String.format("%s Start ...", getTimestamp()));
 
@@ -333,6 +336,7 @@ public class Main {
 
             if(batch >= 1000 || chunk.size() >= 4 * 1024 * 1024) {
                 writeByte(chunk, (byte) StartFlag.EOF.ordinal());
+                actual_bytes += chunk.size();
                 byte[] data = compress(chunk.toByteArray());
                 writeByte(out, (byte) StartFlag.DataRow.ordinal());
                 writeInteger(out, data.length);
@@ -351,6 +355,7 @@ public class Main {
 
         if(batch > 0) {
             writeByte(chunk, (byte) StartFlag.EOF.ordinal());
+            actual_bytes += chunk.size();
             byte[] data = compress(chunk.toByteArray());
             writeByte(out, (byte) StartFlag.DataRow.ordinal());
             writeInteger(out, data.length);
@@ -360,9 +365,12 @@ public class Main {
         writeByte(out, (byte) StartFlag.EOF.ordinal());
         out.seek(rows_offset);
         writeInteger(out, rows);
+        writeLong(out, actual_bytes);
         out.close();
 
         System.out.println(String.format("%s Total: %d rows", getTimestamp(), rows));
+        DecimalFormat df = new DecimalFormat("#,###");
+        System.out.println(String.format("Total original size: %s bytes", df.format(actual_bytes)));
 
         rs.close();
         stmt.close();
@@ -370,6 +378,7 @@ public class Main {
 
     private static void _import(Connection conn) throws SQLException, IOException {
         int rows = 0, total_rows = 0;
+        long actual_bytes = 0;
         FieldType[] fieldTypes = null;
         String[] names = null;
         byte flag;
@@ -387,7 +396,7 @@ public class Main {
         //写文件格式版本
         short format = (short) readShort(ins);
         if(format != FILE_FORMAT) {
-            System.err.println(String.format("file format version '%d' is not support, expect '%d'.", format, FILE_FORMAT));
+            System.err.println(String.format("File format version '%d' is not support, expect '%d'.", format, FILE_FORMAT));
             ins.close();
             return;
         }
@@ -406,6 +415,9 @@ public class Main {
         //读取总行数
         total_rows = readInteger(ins);
         System.out.println(String.format("Total rows: %d", total_rows));
+        actual_bytes = readLong(ins);
+        DecimalFormat df = new DecimalFormat("#,###");
+        System.out.println(String.format("Total original size: %s bytes", df.format(actual_bytes)));
 
         StringBuilder sql = new StringBuilder();
         if(!args.containsKey("fields")) {
@@ -712,6 +724,12 @@ public class Main {
     }
 
     private static void writeLong(OutputStream out, long value) throws IOException {
+        ByteBuffer bb = ByteBuffer.allocate(8);
+        bb.asLongBuffer().put(value);
+        out.write(bb.array());
+    }
+
+    private static void writeLong(RandomAccessFile out, long value) throws IOException {
         ByteBuffer bb = ByteBuffer.allocate(8);
         bb.asLongBuffer().put(value);
         out.write(bb.array());
