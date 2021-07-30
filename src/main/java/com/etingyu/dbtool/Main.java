@@ -12,9 +12,8 @@ import java.util.zip.GZIPOutputStream;
 
 public class Main {
     private static final int MAGIC_CODE = 0x89ABCDEF;
+    private static final short FILE_FORMAT = 0x1;
     private static HashMap<String, Object> args = new HashMap<>();
-//    private static boolean isOracle = false;
-//    private static boolean isMySQL = false;
 
     private static int _limit = Integer.MAX_VALUE;
     private static int _feedback = 10000;
@@ -197,6 +196,9 @@ public class Main {
         //写标识
         writeInteger(out, MAGIC_CODE);
 
+        //写文件格式版本
+        writeShort(out, FILE_FORMAT);
+
         //写列数量
         writeByte(out, (byte) StartFlag.FieldInfo.ordinal());
         writeShort(out, (short) fieldTypes.length);
@@ -378,6 +380,14 @@ public class Main {
         //读标识符
         if(readInteger(ins) != MAGIC_CODE) {
             System.err.println("Invalid data format");
+            ins.close();
+            return;
+        }
+
+        //写文件格式版本
+        short format = (short) readShort(ins);
+        if(format != FILE_FORMAT) {
+            System.err.println(String.format("file format version '%d' is not support, expect '%d'.", format, FILE_FORMAT));
             ins.close();
             return;
         }
