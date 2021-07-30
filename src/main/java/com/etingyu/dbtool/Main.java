@@ -130,16 +130,14 @@ public class Main {
 
         String jdbc = null;
         if(args.get("type").toString().equalsIgnoreCase("oracle")) {
-//            isOracle = true;
             Class.forName("oracle.jdbc.OracleDriver");
             jdbc = String.format("jdbc:oracle:thin:@%s:%s", args.get("host"), args.get("db"));
-            System.out.println(String.format("Oracle: %s", jdbc));
+//            System.out.println(String.format("Oracle: %s", jdbc));
         }
         else if(args.get("type").toString().equalsIgnoreCase("mysql")) {
-//            isMySQL = true;
             Class.forName("com.mysql.cj.jdbc.Driver");
             jdbc = String.format("jdbc:mysql://%s/%s?useSSL=false&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=UTF-8&zeroDateTimeBehavior=convertToNull", args.get("host"), args.get("db"));
-            System.out.println(String.format("MySQL: %s", jdbc));
+//            System.out.println(String.format("MySQL: %s", jdbc));
         }
         else
             throw new Exception(String.format("Unsupported db type: %s", args.get("type")));
@@ -166,7 +164,7 @@ public class Main {
         long rows_offset = 0;
         long actual_bytes = 0;
         FieldType[] fieldTypes = null;
-
+        String[] fieldTypeNames = null;
 
         StringBuilder sql = new StringBuilder();
         sql.append("select ");
@@ -183,12 +181,13 @@ public class Main {
                 sql.append("where ");
             sql.append(s);
         }
-        System.out.println(String.format("SQL: %s", sql.toString()));
+//        System.out.println(String.format("SQL: %s", sql.toString()));
 
         Statement stmt = conn.createStatement();
         ResultSet rs = stmt.executeQuery(sql.toString());
         ResultSetMetaData md = rs.getMetaData();
         fieldTypes = new FieldType[md.getColumnCount()];
+        fieldTypeNames = new String[md.getColumnCount()];
 
         String filename = args.get("output").toString();
         //删除文件
@@ -213,9 +212,29 @@ public class Main {
             switch (md.getColumnType(i + 1)) {
                 case Types.INTEGER:
                     fieldTypes[i] = FieldType.Integer;
+                    fieldTypeNames[i] = "integer";
                     break;
                 case Types.NUMERIC:
                 case Types.DECIMAL:
+                    if(scale > 0) {
+                        if (md.getColumnType(i + 1) == Types.NUMERIC)
+                            fieldTypeNames[i] = String.format("numeric(%d.%d)", prec, scale);
+                        else if (md.getColumnType(i + 1) == Types.DECIMAL)
+                            fieldTypeNames[i] = String.format("decimal(%d.%d)", prec, scale);
+                    }
+                    else if(prec > 0) {
+                        if (md.getColumnType(i + 1) == Types.NUMERIC)
+                            fieldTypeNames[i] = String.format("numeric(%d)", prec);
+                        else if (md.getColumnType(i + 1) == Types.DECIMAL)
+                            fieldTypeNames[i] = String.format("decimal(%d)", prec);
+                    }
+                    else {
+                        if (md.getColumnType(i + 1) == Types.NUMERIC)
+                            fieldTypeNames[i] = "numeric";
+                        else if (md.getColumnType(i + 1) == Types.DECIMAL)
+                            fieldTypeNames[i] = "decimal";
+                    }
+
                     if(scale == 0) {
                         if(prec <= 9)
                             fieldTypes[i] = FieldType.Integer;
@@ -228,6 +247,11 @@ public class Main {
                     break;
                 case Types.CHAR:
                 case Types.VARCHAR:
+                    if (md.getColumnType(i + 1) == Types.CHAR)
+                        fieldTypeNames[i] = String.format("char(%d)", prec);
+                    else if (md.getColumnType(i + 1) == Types.VARCHAR)
+                        fieldTypeNames[i] = String.format("varchar(%d)", prec);
+
                     if(prec <= Byte.MAX_VALUE)
                         fieldTypes[i] = FieldType.SmallString;
                     else if(prec <= Short.MAX_VALUE)
@@ -237,15 +261,26 @@ public class Main {
                     break;
                 case Types.LONGVARCHAR:
                 case Types.CLOB:
+                    if (md.getColumnType(i + 1) == Types.LONGVARCHAR)
+                        fieldTypeNames[i] = String.format("varchar(%d)", prec);
+                    else if (md.getColumnType(i + 1) == Types.CLOB)
+                        fieldTypeNames[i] = "clob";
+
                     fieldTypes[i] = FieldType.LongString;
                     break;
                 case Types.DATE:
+                    fieldTypeNames[i] = "date";
+
                     fieldTypes[i] = FieldType.Date;
                     break;
                 case Types.TIMESTAMP:
+                    fieldTypeNames[i] = "datetime";
+
                     fieldTypes[i] = FieldType.DateTime;
                     break;
                 case Types.VARBINARY:
+                    fieldTypeNames[i] = String.format("varbinary(%d)", prec);
+
                     if(prec <= Byte.MAX_VALUE)
                         fieldTypes[i] = FieldType.SmallBinary;
                     else if(prec <= Short.MAX_VALUE)
@@ -254,6 +289,8 @@ public class Main {
                         fieldTypes[i] = FieldType.LongBinary;
                     break;
                 case Types.LONGVARBINARY:
+                    fieldTypeNames[i] = String.format("varbinary(%d)", prec);
+
                     fieldTypes[i] = FieldType.LongBinary;
                     break;
                 default:
@@ -262,6 +299,7 @@ public class Main {
 
             //写列类型
             writeByte(out, (byte) fieldTypes[i].ordinal());
+            writeString(out, FieldType.SmallString, fieldTypeNames[i]);
 
             //写列名
             writeString(out, FieldType.SmallString, md.getColumnName(i + 1));
@@ -380,7 +418,7 @@ public class Main {
         int rows = 0, total_rows = 0;
         long actual_bytes = 0;
         FieldType[] fieldTypes = null;
-        String[] names = null;
+        String[] names = null, fieldTypeNames = null;
         byte flag;
         HashMap<Integer, Integer> fieldsMap = new HashMap<>();
 
@@ -405,10 +443,12 @@ public class Main {
         flag = (byte) readByte(ins);
         fieldTypes = new FieldType[readShort(ins)];
         names = new String[fieldTypes.length];
+        fieldTypeNames = new String[fieldTypes.length];
 
         //读列类型和列名
         for(int i=0; i<fieldTypes.length; i++) {
             fieldTypes[i] = FieldType.fromInt(readByte(ins));
+            fieldTypeNames[i] = readString(ins, FieldType.SmallString);
             names[i] = readString(ins, FieldType.SmallString);
         }
 
@@ -423,7 +463,8 @@ public class Main {
         if(!args.containsKey("fields")) {
             System.out.print("Fields: ");
             sql.append("insert into ");
-            sql.append(args.get("table").toString());
+            if(_limit > 0)
+                sql.append(args.get("table").toString());
             sql.append("(");
             for(int i=0; i<fieldTypes.length; i++) {
                 if(i > 0) {
@@ -432,7 +473,7 @@ public class Main {
                 }
                 fieldsMap.put(i, i);
                 sql.append(names[i]);
-                System.out.print(names[i]);
+                System.out.print(String.format("%s(%s)", names[i], fieldTypeNames[i]));
             }
             sql.append(")values(");
             for(int i=0; i<fieldTypes.length; i++) {
@@ -450,7 +491,8 @@ public class Main {
 
             int field_count = 0;
             sql.append("insert into ");
-            sql.append(args.get("table").toString());
+            if(_limit > 0)
+                sql.append(args.get("table").toString());
             sql.append("(");
             for(String s : args.get("fields").toString().split(",")) {
                 String[] parts =  s.trim().split("->");
@@ -487,12 +529,12 @@ public class Main {
             sql.append(")");
         }
 
-        if(_limit == 0) {
+        if(_limit <= 0) {
             ins.close();
             return;
         }
 
-        System.out.println(String.format("SQL: %s", sql.toString()));
+//        System.out.println(String.format("SQL: %s", sql.toString()));
         System.out.println(String.format("%s Start ...", getTimestamp()));
 
         PreparedStatement ps = conn.prepareStatement(sql.toString());
