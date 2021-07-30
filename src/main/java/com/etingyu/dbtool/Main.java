@@ -163,6 +163,7 @@ public class Main {
 
     private static void export(Connection conn) throws SQLException, IOException {
         int rows = 0;
+        long rows_offset = 0;
         FieldType[] fieldTypes = null;
 
 
@@ -188,8 +189,10 @@ public class Main {
         ResultSetMetaData md = rs.getMetaData();
         fieldTypes = new FieldType[md.getColumnCount()];
 
-
-        FileOutputStream out = new FileOutputStream(args.get("output").toString());
+        String filename = args.get("output").toString();
+        //删除文件
+        new File(filename).delete();
+        RandomAccessFile out = new RandomAccessFile(filename, "rw");
 
         //写标识
         writeInteger(out, MAGIC_CODE);
@@ -259,6 +262,10 @@ public class Main {
             //写列名
             writeString(out, FieldType.SmallString, md.getColumnName(i + 1));
         }
+
+        //准备写行数
+        rows_offset = out.getFilePointer();
+        writeInteger(out, 0);
 
         System.out.println(String.format("%s Start ...", getTimestamp()));
 
@@ -349,7 +356,8 @@ public class Main {
         }
 
         writeByte(out, (byte) StartFlag.EOF.ordinal());
-
+        out.seek(rows_offset);
+        writeInteger(out, rows);
         out.close();
 
         System.out.println(String.format("%s Total: %d rows", getTimestamp(), rows));
@@ -359,7 +367,7 @@ public class Main {
     }
 
     private static void _import(Connection conn) throws SQLException, IOException {
-        int rows = 0;
+        int rows = 0, total_rows = 0;
         FieldType[] fieldTypes = null;
         String[] names = null;
         byte flag;
@@ -384,6 +392,10 @@ public class Main {
             fieldTypes[i] = FieldType.fromInt(readByte(ins));
             names[i] = readString(ins, FieldType.SmallString);
         }
+
+        //读取总行数
+        total_rows = readInteger(ins);
+        System.out.println(String.format("Total rows: %d", total_rows));
 
         StringBuilder sql = new StringBuilder();
         if(!args.containsKey("fields")) {
@@ -469,6 +481,7 @@ public class Main {
             ByteArrayInputStream in = new ByteArrayInputStream(new byte[StartFlag.EOF.ordinal()]);
 
             for (; ; ) {
+
                 //读取缓冲区
                 flag = (byte) readByte(in);
                 if (flag != StartFlag.DataRow.ordinal()) {
@@ -601,7 +614,7 @@ public class Main {
                 }
 
                 if ((rows % _feedback) == 0) {
-                    System.out.println(String.format("%s %d rows ...", getTimestamp(), rows));
+                    System.out.println(String.format("%s %d rows, %.4g%% ...", getTimestamp(), rows, ((int)(rows * 10000.0 / total_rows)) / 100.0));
                 }
                 if (rows >= _limit)
                     break;
@@ -644,11 +657,21 @@ public class Main {
         out.write(value);
     }
 
+    private static void writeByte(RandomAccessFile out, byte value) throws IOException {
+        out.write(value);
+    }
+
     private static int readByte(InputStream in) throws IOException {
         return in.read();
     }
 
     private static void writeShort(OutputStream out, short value) throws IOException {
+        ByteBuffer bb = ByteBuffer.allocate(2);
+        bb.asShortBuffer().put(value);
+        out.write(bb.array());
+    }
+
+    private static void writeShort(RandomAccessFile out, short value) throws IOException {
         ByteBuffer bb = ByteBuffer.allocate(2);
         bb.asShortBuffer().put(value);
         out.write(bb.array());
@@ -661,6 +684,12 @@ public class Main {
     }
 
     private static void writeInteger(OutputStream out, int value) throws IOException {
+        ByteBuffer bb = ByteBuffer.allocate(4);
+        bb.asIntBuffer().put(value);
+        out.write(bb.array());
+    }
+
+    private static void writeInteger(RandomAccessFile out, int value) throws IOException {
         ByteBuffer bb = ByteBuffer.allocate(4);
         bb.asIntBuffer().put(value);
         out.write(bb.array());
@@ -697,6 +726,30 @@ public class Main {
     }
 
     private static void writeString(OutputStream out, FieldType type, String value) throws IOException {
+        int len = 0;
+        byte[] data = null;
+        if(value != null) {
+            data = value.getBytes("utf-8");
+            len = data.length;
+        }
+
+        switch (type) {
+            case SmallString:
+                writeByte(out, (byte) len);
+                break;
+            case MediumString:
+                writeShort(out, (short) len);
+                break;
+            case LongString:
+                writeInteger(out, len);
+                break;
+        }
+
+        if(len > 0)
+            out.write(data);
+    }
+
+    private static void writeString(RandomAccessFile out, FieldType type, String value) throws IOException {
         int len = 0;
         byte[] data = null;
         if(value != null) {
