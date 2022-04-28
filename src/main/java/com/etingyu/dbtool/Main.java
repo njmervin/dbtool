@@ -32,7 +32,8 @@ public class Main {
         DateTime,
         SmallBinary,
         MediumBinary,
-        LongBinary;
+        LongBinary,
+        Null;
 
         public static FieldType fromInt(int v) {
             if(v == Integer.ordinal())
@@ -57,6 +58,8 @@ public class Main {
                 return MediumBinary;
             else if(v == LongBinary.ordinal())
                 return LongBinary;
+            else if(v == Null.ordinal())
+                return Null;
             else
                 return null;
         }
@@ -142,7 +145,9 @@ public class Main {
         else
             throw new Exception(String.format("Unsupported db type: %s", args.get("type")));
 
+        System.out.println(String.format("%s Connect to database ...", getTimestamp()));
         Connection conn = DriverManager.getConnection(jdbc, args.get("user").toString(), args.get("pass").toString());
+        System.out.println(String.format("%s Connect success.", getTimestamp()));
         if(args.get("action").toString().equalsIgnoreCase("export"))
             export(conn);
         else if(args.get("action").toString().equalsIgnoreCase("import")) {
@@ -184,6 +189,7 @@ public class Main {
 //        System.out.println(String.format("SQL: %s", sql.toString()));
 
         Statement stmt = conn.createStatement();
+        System.out.println(String.format("%s Execute query ...", getTimestamp()));
         ResultSet rs = stmt.executeQuery(sql.toString());
         ResultSetMetaData md = rs.getMetaData();
         fieldTypes = new FieldType[md.getColumnCount()];
@@ -210,9 +216,21 @@ public class Main {
             int scale = md.getScale(i + 1);
 
             switch (md.getColumnType(i + 1)) {
+                case Types.NULL:
+                    fieldTypes[i] = FieldType.Null;
+                    fieldTypeNames[i] = "null";
+                    break;
                 case Types.INTEGER:
+                case Types.TINYINT:
+                    if(md.getColumnType(i + 1) == Types.INTEGER)
+                        fieldTypeNames[i] = "int";
+                    else if(md.getColumnType(i + 1) == Types.TINYINT)
+                        fieldTypeNames[i] = "tinyint";
                     fieldTypes[i] = FieldType.Integer;
-                    fieldTypeNames[i] = "integer";
+                    break;
+                case Types.BIGINT:
+                    fieldTypes[i] = FieldType.Long;
+                    fieldTypeNames[i] = "bigint";
                     break;
                 case Types.NUMERIC:
                 case Types.DECIMAL:
@@ -294,7 +312,7 @@ public class Main {
                     fieldTypes[i] = FieldType.LongBinary;
                     break;
                 default:
-                    System.out.println(String.format("Unsupport field data type: %d: %s", md.getColumnType(i + 1), md.getColumnTypeName(i + 1)));
+                    System.out.println(String.format("Unsupport field '%s' data type: %d: %s", md.getColumnLabel(i + 1), md.getColumnType(i + 1), md.getColumnTypeName(i + 1)));
             }
 
             //写列类型
@@ -320,6 +338,8 @@ public class Main {
 
             for(int i=0; i<fieldTypes.length; i++) {
                 switch (fieldTypes[i]) {
+                    case Null:
+                        break;
                     case Integer:
                         int iVal = rs.getInt(i + 1);
                         if(rs.wasNull())
@@ -570,6 +590,12 @@ public class Main {
                 int wasNull;
                 for(int i=0; i<fieldTypes.length; i++) {
                     switch (fieldTypes[i]) {
+                        case Null:
+                            if (rows == _debugrow)
+                                System.out.println(String.format("[%d]%s: null", i + 1, names[i]));
+                            if (fieldsMap.containsKey(i))
+                                ps.setNull(fieldsMap.get(i) + 1, Types.NULL);
+                            break;
                         case Integer:
                             wasNull = readByte(in);
                             if (wasNull == 0) {
