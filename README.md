@@ -3,6 +3,7 @@
 关系型数据库数据导入导出工具
 
 ## 导出
+
 ```sh
       export
            --type oracle                       # 数据库类型：oracle / mysql
@@ -21,6 +22,7 @@ java -jar dbtool-1.0.0.jar export --type oracle --host ***:*** --db orcl --user 
 ```
 
 ## 导入
+
 ```sh
      import
            --type oracle                       # 数据库类型：oracle / mysql
@@ -42,6 +44,7 @@ java -jar dbtool-1.0.0.jar import --type oracle --host ***:*** --db orcl --user 
 ```
 
 ## 更新
+
 ```sh
      exec
            --type oracle                       # 数据库类型：oracle / mysql
