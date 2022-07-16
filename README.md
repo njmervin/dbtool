@@ -40,7 +40,7 @@ java -jar dbtool-1.0.0.jar export --type oracle --host ***:*** --db orcl --user 
            --debugrow N                        # <可选> 设置输出第N行每列的详细数据
            --input destfile                    # 要导入的数据文件路径
 
-java -jar dbtool-1.0.0.jar import --type oracle --host ***:*** --db orcl --user *** --pass *** --table *** --batch 1000 --input "D:\data\***.dat
+java -jar dbtool-1.0.0.jar import --type oracle --host ***:*** --db orcl --user *** --pass *** --table *** --batch 1000 --input "D:\data\***.dat"
 ```
 
 ## 更新

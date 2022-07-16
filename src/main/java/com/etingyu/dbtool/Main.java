@@ -142,6 +142,10 @@ public class Main {
             jdbc = String.format("jdbc:mysql://%s/%s?useSSL=false&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=UTF-8&zeroDateTimeBehavior=convertToNull", args.get("host"), args.get("db"));
 //            System.out.println(String.format("MySQL: %s", jdbc));
         }
+        else if(args.get("type").toString().equalsIgnoreCase("postgresql")) {
+            Class.forName("org.postgresql.Driver");
+            jdbc = String.format("jdbc:postgresql://%s/%s", args.get("host"), args.get("db"));
+        }
         else
             throw new Exception(String.format("Unsupported db type: %s", args.get("type")));
 
