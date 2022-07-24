@@ -283,10 +283,13 @@ public class Main {
                     break;
                 case Types.LONGVARCHAR:
                 case Types.CLOB:
+                case Types.NCLOB:
                     if (md.getColumnType(i + 1) == Types.LONGVARCHAR)
                         fieldTypeNames[i] = String.format("varchar(%d)", prec);
                     else if (md.getColumnType(i + 1) == Types.CLOB)
                         fieldTypeNames[i] = "clob";
+                    else if (md.getColumnType(i + 1) == Types.NCLOB)
+                        fieldTypeNames[i] = "nclob";
 
                     fieldTypes[i] = FieldType.LongString;
                     break;
