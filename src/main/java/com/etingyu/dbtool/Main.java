@@ -314,6 +314,7 @@ public class Main {
                         fieldTypes[i] = FieldType.LongBinary;
                     break;
                 case Types.LONGVARBINARY:
+                case Types.BLOB:
                     fieldTypeNames[i] = String.format("varbinary(%d)", prec);
 
                     fieldTypes[i] = FieldType.LongBinary;
