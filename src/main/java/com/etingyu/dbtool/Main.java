@@ -482,37 +482,28 @@ public class Main {
 
         //读取总行数
         total_rows = readInteger(ins);
-        System.out.println(String.format("Total rows: %d", total_rows));
+        System.out.printf("Total rows: %d%n", total_rows);
         actual_bytes = readLong(ins);
         DecimalFormat df = new DecimalFormat("#,###");
-        System.out.println(String.format("Total original size: %s bytes", df.format(actual_bytes)));
+        System.out.printf("Total original size: %s bytes%n", df.format(actual_bytes));
 
         StringBuilder sql = new StringBuilder();
-        if(!args.containsKey("fields")) {
-            System.out.print("Fields: ");
-            sql.append("insert into ");
-            if(_limit > 0)
-                sql.append(args.get("table").toString());
-            sql.append("(");
-            for(int i=0; i<fieldTypes.length; i++) {
-                if(i > 0) {
-                    System.out.print(", ");
-                    sql.append(",");
-                }
-                fieldsMap.put(i, i);
-                sql.append(names[i]);
-                System.out.print(String.format("%s(%s)", names[i], fieldTypeNames[i]));
+        if(!args.containsKey("fields") || args.get("fields").toString().isEmpty()) {
+            PreparedStatement ps = conn.prepareStatement(String.format("select * from %s where 1=0", args.get("table").toString()));
+            ResultSet rs = ps.executeQuery();
+            ResultSetMetaData meta = rs.getMetaData();
+            StringBuilder sbuf = new StringBuilder();
+            for(int i=0; i<meta.getColumnCount(); i++) {
+                if(i > 0)
+                    sbuf.append(",");
+                sbuf.append(meta.getColumnName(i + 1).toLowerCase());
             }
-            sql.append(")values(");
-            for(int i=0; i<fieldTypes.length; i++) {
-                if (i > 0)
-                    sql.append(",");
-                sql.append("?");
-            }
-            sql.append(")");
-            System.out.println();
+            args.put("fields", sbuf.toString());
+            rs.close();
+            ps.close();
         }
-        else {
+
+        if(true){
             HashMap<String, Integer> map = new HashMap<>();
             for(int i=0; i<names.length; i++)
                 map.put(names[i].toLowerCase(), i);
@@ -542,7 +533,7 @@ public class Main {
                     field_count += 1;
                 }
                 else {
-                    System.err.println(String.format("The data file not contain field \"%s\"", parts[0]));
+                    System.err.printf("Warn: The data file not contain field \"%s\", ignored.%n", parts[0]);
                     ins.close();
                     return;
                 }
