@@ -74,6 +74,7 @@ public class Main {
     /**
      * export
      *      --type oracle
+     *      --tns (Description=...)
      *      --host 127.0.0.1:1521
      *      --db orcl
      *      --user test
@@ -134,7 +135,10 @@ public class Main {
         String jdbc = null;
         if(args.get("type").toString().equalsIgnoreCase("oracle")) {
             Class.forName("oracle.jdbc.OracleDriver");
-            jdbc = String.format("jdbc:oracle:thin:@%s:%s", args.get("host"), args.get("db"));
+            if(args.containsKey("tns"))
+                jdbc = String.format("jdbc:oracle:thin:@%s", args.get("tns"));
+            else
+                jdbc = String.format("jdbc:oracle:thin:@%s:%s", args.get("host"), args.get("db"));
 //            System.out.println(String.format("Oracle: %s", jdbc));
         }
         else if(args.get("type").toString().equalsIgnoreCase("mysql")) {
