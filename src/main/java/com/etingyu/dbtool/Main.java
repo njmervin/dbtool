@@ -2,8 +2,11 @@ package com.etingyu.dbtool;
 
 import java.io.*;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.sql.*;
 import java.text.DecimalFormat;
+import java.text.NumberFormat;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
@@ -74,7 +77,7 @@ public class Main {
     /**
      * export
      *      --type oracle
-     *      --tns (Description=...)
+     *      --tns TNS
      *      --host 127.0.0.1:1521
      *      --db orcl
      *      --user test
@@ -86,8 +89,24 @@ public class Main {
      *      --feedback N
      *      --output destfile
      *
+     * export_to_csv
+     *      --type oracle
+     *      --tns TNS
+     *      --host 127.0.0.1:1521
+     *      --db orcl
+     *      --user test
+     *      --pass test
+     *      --table "table"
+     *      --fields "field1,...,fieldN"
+     *      --where "where clause"
+     *      --limit N
+     *      --feedback N
+     *      --output destfile
+     *      --encoding utf-8
+     *
      * import
      *      --type oracle
+     *      --tns TNS
      *      --host 127.0.0.1:1521
      *      --db orcl
      *      --user test
@@ -102,6 +121,7 @@ public class Main {
      *
      * exec
      *      --type oracle
+     *      --tns TNS
      *      --host 127.0.0.1:1521
      *      --db orcl
      *      --user test
@@ -158,6 +178,8 @@ public class Main {
         System.out.println(String.format("%s Connect success.", getTimestamp()));
         if(args.get("action").toString().equalsIgnoreCase("export"))
             export(conn);
+        else if(args.get("action").toString().equalsIgnoreCase("export_to_csv"))
+            export_to_csv(conn);
         else if(args.get("action").toString().equalsIgnoreCase("import")) {
             if(args.containsKey("batch"))
                 _batch = Integer.parseInt(args.get("batch").toString());
@@ -441,6 +463,243 @@ public class Main {
         System.out.println(String.format("%s Total: %d rows", getTimestamp(), rows));
         DecimalFormat df = new DecimalFormat("#,###");
         System.out.println(String.format("Total original size: %s bytes", df.format(actual_bytes)));
+
+        rs.close();
+        stmt.close();
+    }
+
+    private static void export_to_csv(Connection conn) throws SQLException, IOException {
+        int rows = 0;
+        long rows_offset = 0;
+        long actual_bytes = 0;
+        FieldType[] fieldTypes = null;
+        String[] fieldTypeNames = null;
+
+        StringBuilder sql = new StringBuilder();
+        sql.append("select ");
+        if(args.containsKey("fields"))
+            sql.append(args.get("fields").toString());
+        else
+            sql.append("*");
+        sql.append(" from ");
+        sql.append(args.get("table").toString());
+        if(args.containsKey("where")) {
+            sql.append(" ");
+            String s = args.get("where").toString();
+            if(!s.startsWith("where") && !s.startsWith("WHERE"))
+                sql.append("where ");
+            sql.append(s);
+        }
+//        System.out.println(String.format("SQL: %s", sql.toString()));
+
+        Statement stmt = conn.createStatement();
+        System.out.println(String.format("%s Execute query ...", getTimestamp()));
+        ResultSet rs = stmt.executeQuery(sql.toString());
+        ResultSetMetaData md = rs.getMetaData();
+        fieldTypes = new FieldType[md.getColumnCount()];
+        fieldTypeNames = new String[md.getColumnCount()];
+
+        String filename = args.get("output").toString();
+        //删除文件
+        new File(filename).delete();
+        String encoding = "utf-8";
+        if(args.containsKey("encoding"))
+            encoding = args.get("encoding").toString();
+        OutputStream out = Files.newOutputStream(Paths.get(filename));
+
+        for(int i=0; i<fieldTypes.length; i++) {
+            int prec = md.getPrecision(i + 1);
+            int scale = md.getScale(i + 1);
+
+            switch (md.getColumnType(i + 1)) {
+                case Types.NULL:
+                    fieldTypes[i] = FieldType.Null;
+                    fieldTypeNames[i] = "null";
+                    break;
+                case Types.INTEGER:
+                case Types.TINYINT:
+                    if(md.getColumnType(i + 1) == Types.INTEGER)
+                        fieldTypeNames[i] = "int";
+                    else if(md.getColumnType(i + 1) == Types.TINYINT)
+                        fieldTypeNames[i] = "tinyint";
+                    fieldTypes[i] = FieldType.Integer;
+                    break;
+                case Types.BIGINT:
+                    fieldTypes[i] = FieldType.Long;
+                    fieldTypeNames[i] = "bigint";
+                    break;
+                case Types.NUMERIC:
+                case Types.DECIMAL:
+                    if(scale > 0) {
+                        if (md.getColumnType(i + 1) == Types.NUMERIC)
+                            fieldTypeNames[i] = String.format("numeric(%d.%d)", prec, scale);
+                        else if (md.getColumnType(i + 1) == Types.DECIMAL)
+                            fieldTypeNames[i] = String.format("decimal(%d.%d)", prec, scale);
+                    }
+                    else if(prec > 0) {
+                        if (md.getColumnType(i + 1) == Types.NUMERIC)
+                            fieldTypeNames[i] = String.format("numeric(%d)", prec);
+                        else if (md.getColumnType(i + 1) == Types.DECIMAL)
+                            fieldTypeNames[i] = String.format("decimal(%d)", prec);
+                    }
+                    else {
+                        if (md.getColumnType(i + 1) == Types.NUMERIC)
+                            fieldTypeNames[i] = "numeric";
+                        else if (md.getColumnType(i + 1) == Types.DECIMAL)
+                            fieldTypeNames[i] = "decimal";
+                    }
+
+                    if(scale == 0) {
+                        if(prec <= 9)
+                            fieldTypes[i] = FieldType.Integer;
+                        else
+                            fieldTypes[i] = FieldType.Long;
+                    }
+                    else {
+                        fieldTypes[i] = FieldType.Double;
+                    }
+                    break;
+                case Types.CHAR:
+                case Types.VARCHAR:
+                    if (md.getColumnType(i + 1) == Types.CHAR)
+                        fieldTypeNames[i] = String.format("char(%d)", prec);
+                    else if (md.getColumnType(i + 1) == Types.VARCHAR)
+                        fieldTypeNames[i] = String.format("varchar(%d)", prec);
+
+                    if(prec <= Byte.MAX_VALUE)
+                        fieldTypes[i] = FieldType.SmallString;
+                    else if(prec <= Short.MAX_VALUE)
+                        fieldTypes[i] = FieldType.MediumString;
+                    else
+                        fieldTypes[i] = FieldType.LongString;
+                    break;
+                case Types.LONGVARCHAR:
+                case Types.CLOB:
+                case Types.NCLOB:
+                    if (md.getColumnType(i + 1) == Types.LONGVARCHAR)
+                        fieldTypeNames[i] = String.format("varchar(%d)", prec);
+                    else if (md.getColumnType(i + 1) == Types.CLOB)
+                        fieldTypeNames[i] = "clob";
+                    else if (md.getColumnType(i + 1) == Types.NCLOB)
+                        fieldTypeNames[i] = "nclob";
+
+                    fieldTypes[i] = FieldType.LongString;
+                    break;
+                case Types.DATE:
+                    fieldTypeNames[i] = "date";
+
+                    fieldTypes[i] = FieldType.Date;
+                    break;
+                case Types.TIMESTAMP:
+                    fieldTypeNames[i] = "datetime";
+
+                    fieldTypes[i] = FieldType.DateTime;
+                    break;
+                case Types.VARBINARY:
+                    fieldTypeNames[i] = String.format("varbinary(%d)", prec);
+
+                    if(prec <= Byte.MAX_VALUE)
+                        fieldTypes[i] = FieldType.SmallBinary;
+                    else if(prec <= Short.MAX_VALUE)
+                        fieldTypes[i] = FieldType.MediumBinary;
+                    else
+                        fieldTypes[i] = FieldType.LongBinary;
+                    break;
+                case Types.LONGVARBINARY:
+                case Types.BLOB:
+                    fieldTypeNames[i] = String.format("varbinary(%d)", prec);
+
+                    fieldTypes[i] = FieldType.LongBinary;
+                    break;
+                default:
+                    System.out.println(String.format("Unsupport field '%s' data type: %d: %s", md.getColumnLabel(i + 1), md.getColumnType(i + 1), md.getColumnTypeName(i + 1)));
+            }
+
+            //写列名
+            if(i > 0)
+                out.write(',');
+            out.write(md.getColumnName(i + 1).getBytes(encoding));
+        }
+        out.write('\n');
+
+        //准备写行数和数据量
+        System.out.println(String.format("%s Start ...", getTimestamp()));
+
+        NumberFormat nf = NumberFormat.getInstance();
+        nf.setGroupingUsed(false);
+
+        while (rs.next()) {
+            for(int i=0; i<fieldTypes.length; i++) {
+                if(i > 0)
+                    out.write(',');
+
+                switch (fieldTypes[i]) {
+                    case Null:
+                        break;
+                    case Integer:
+                        int iVal = rs.getInt(i + 1);
+                        if(!rs.wasNull()) {
+                            out.write(Integer.toString(iVal).getBytes(encoding));
+                        }
+                        break;
+                    case Long:
+                        long lVal = rs.getLong(i + 1);
+                        if(!rs.wasNull()) {
+                            out.write(Long.toString(lVal).getBytes(encoding));
+                        }
+                        break;
+                    case Double:
+                        double fVal = rs.getDouble(i + 1);
+                        if(!rs.wasNull()) {
+                            out.write(nf.format(fVal).getBytes(encoding));
+                        }
+                        break;
+                    case SmallString:
+                    case MediumString:
+                    case LongString:
+                        String sVal = rs.getString(i + 1);
+                        if(!rs.wasNull()) {
+                            sVal = sVal.replace("\"", "\"\"");
+                            out.write('"');
+                            out.write(sVal.getBytes(encoding));
+                            out.write('"');
+                        }
+                        break;
+                    case Date:
+                        java.sql.Timestamp sDate = rs.getTimestamp(i + 1);
+                        if(!rs.wasNull()) {
+                            out.write(new SimpleDateFormat("yyyy-MM-dd").format(sDate).getBytes(encoding));
+                        }
+                        break;
+                    case DateTime:
+                        java.sql.Timestamp sTimestamp = rs.getTimestamp(i + 1);
+                        if(!rs.wasNull()) {
+                            out.write(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(sTimestamp).getBytes(encoding));
+                        }
+                        break;
+                    case SmallBinary:
+                    case MediumBinary:
+                    case LongBinary:
+                        break;
+                    default:
+                        assert false;
+                }
+
+            }
+
+            out.write('\n');
+            rows += 1;
+
+            if((rows % _feedback) == 0) {
+                System.out.println(String.format("%s %d rows ...", getTimestamp(), rows));
+            }
+            if(rows >= _limit)
+                break;
+        }
+
+        out.close();
+
+        System.out.println(String.format("%s Total: %d rows", getTimestamp(), rows));
 
         rs.close();
         stmt.close();
