@@ -295,10 +295,13 @@ public class Main {
                     break;
                 case Types.CHAR:
                 case Types.VARCHAR:
+                case Types.NVARCHAR:
                     if (md.getColumnType(i + 1) == Types.CHAR)
                         fieldTypeNames[i] = String.format("char(%d)", prec);
                     else if (md.getColumnType(i + 1) == Types.VARCHAR)
                         fieldTypeNames[i] = String.format("varchar(%d)", prec);
+                    else if (md.getColumnType(i + 1) == Types.NVARCHAR)
+                        fieldTypeNames[i] = String.format("nvarchar(%d)", prec);
 
                     if(prec <= Byte.MAX_VALUE)
                         fieldTypes[i] = FieldType.SmallString;
@@ -497,7 +500,6 @@ public class Main {
         ResultSet rs = stmt.executeQuery(sql.toString());
         ResultSetMetaData md = rs.getMetaData();
         fieldTypes = new FieldType[md.getColumnCount()];
-        fieldTypeNames = new String[md.getColumnCount()];
 
         String filename = args.get("output").toString();
         //删除文件
@@ -514,41 +516,16 @@ public class Main {
             switch (md.getColumnType(i + 1)) {
                 case Types.NULL:
                     fieldTypes[i] = FieldType.Null;
-                    fieldTypeNames[i] = "null";
                     break;
                 case Types.INTEGER:
                 case Types.TINYINT:
-                    if(md.getColumnType(i + 1) == Types.INTEGER)
-                        fieldTypeNames[i] = "int";
-                    else if(md.getColumnType(i + 1) == Types.TINYINT)
-                        fieldTypeNames[i] = "tinyint";
                     fieldTypes[i] = FieldType.Integer;
                     break;
                 case Types.BIGINT:
                     fieldTypes[i] = FieldType.Long;
-                    fieldTypeNames[i] = "bigint";
                     break;
                 case Types.NUMERIC:
                 case Types.DECIMAL:
-                    if(scale > 0) {
-                        if (md.getColumnType(i + 1) == Types.NUMERIC)
-                            fieldTypeNames[i] = String.format("numeric(%d.%d)", prec, scale);
-                        else if (md.getColumnType(i + 1) == Types.DECIMAL)
-                            fieldTypeNames[i] = String.format("decimal(%d.%d)", prec, scale);
-                    }
-                    else if(prec > 0) {
-                        if (md.getColumnType(i + 1) == Types.NUMERIC)
-                            fieldTypeNames[i] = String.format("numeric(%d)", prec);
-                        else if (md.getColumnType(i + 1) == Types.DECIMAL)
-                            fieldTypeNames[i] = String.format("decimal(%d)", prec);
-                    }
-                    else {
-                        if (md.getColumnType(i + 1) == Types.NUMERIC)
-                            fieldTypeNames[i] = "numeric";
-                        else if (md.getColumnType(i + 1) == Types.DECIMAL)
-                            fieldTypeNames[i] = "decimal";
-                    }
-
                     if(scale == 0) {
                         if(prec <= 9)
                             fieldTypes[i] = FieldType.Integer;
@@ -561,11 +538,7 @@ public class Main {
                     break;
                 case Types.CHAR:
                 case Types.VARCHAR:
-                    if (md.getColumnType(i + 1) == Types.CHAR)
-                        fieldTypeNames[i] = String.format("char(%d)", prec);
-                    else if (md.getColumnType(i + 1) == Types.VARCHAR)
-                        fieldTypeNames[i] = String.format("varchar(%d)", prec);
-
+                case Types.NVARCHAR:
                     if(prec <= Byte.MAX_VALUE)
                         fieldTypes[i] = FieldType.SmallString;
                     else if(prec <= Short.MAX_VALUE)
@@ -576,28 +549,15 @@ public class Main {
                 case Types.LONGVARCHAR:
                 case Types.CLOB:
                 case Types.NCLOB:
-                    if (md.getColumnType(i + 1) == Types.LONGVARCHAR)
-                        fieldTypeNames[i] = String.format("varchar(%d)", prec);
-                    else if (md.getColumnType(i + 1) == Types.CLOB)
-                        fieldTypeNames[i] = "clob";
-                    else if (md.getColumnType(i + 1) == Types.NCLOB)
-                        fieldTypeNames[i] = "nclob";
-
                     fieldTypes[i] = FieldType.LongString;
                     break;
                 case Types.DATE:
-                    fieldTypeNames[i] = "date";
-
                     fieldTypes[i] = FieldType.Date;
                     break;
                 case Types.TIMESTAMP:
-                    fieldTypeNames[i] = "datetime";
-
                     fieldTypes[i] = FieldType.DateTime;
                     break;
                 case Types.VARBINARY:
-                    fieldTypeNames[i] = String.format("varbinary(%d)", prec);
-
                     if(prec <= Byte.MAX_VALUE)
                         fieldTypes[i] = FieldType.SmallBinary;
                     else if(prec <= Short.MAX_VALUE)
@@ -607,8 +567,6 @@ public class Main {
                     break;
                 case Types.LONGVARBINARY:
                 case Types.BLOB:
-                    fieldTypeNames[i] = String.format("varbinary(%d)", prec);
-
                     fieldTypes[i] = FieldType.LongBinary;
                     break;
                 default:
