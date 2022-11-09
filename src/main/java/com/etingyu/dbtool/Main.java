@@ -626,13 +626,17 @@ public class Main {
                     case Date:
                         java.sql.Timestamp sDate = rs.getTimestamp(i + 1);
                         if(!rs.wasNull()) {
+                            out.write('"');
                             out.write(new SimpleDateFormat("yyyy-MM-dd").format(sDate).getBytes(encoding));
+                            out.write('"');
                         }
                         break;
                     case DateTime:
                         java.sql.Timestamp sTimestamp = rs.getTimestamp(i + 1);
                         if(!rs.wasNull()) {
+                            out.write('"');
                             out.write(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(sTimestamp).getBytes(encoding));
+                            out.write('"');
                         }
                         break;
                     case SmallBinary:
