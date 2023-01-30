@@ -705,6 +705,10 @@ public class Main {
             names[i] = readString(ins, FieldType.SmallString);
         }
 
+        for(int i=0; i<fieldTypes.length; i++) {
+            System.out.printf("Field #%d: %s %s%n", i + 1, names[i], fieldTypeNames[i]);
+        }
+
         //读取总行数
         total_rows = readInteger(ins);
         System.out.printf("Total rows: %d%n", total_rows);
