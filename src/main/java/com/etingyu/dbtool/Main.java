@@ -266,9 +266,9 @@ public class Main {
                 case Types.DECIMAL:
                     if(scale > 0) {
                         if (md.getColumnType(i + 1) == Types.NUMERIC)
-                            fieldTypeNames[i] = String.format("numeric(%d.%d)", prec, scale);
+                            fieldTypeNames[i] = String.format("numeric(%d,%d)", prec, scale);
                         else if (md.getColumnType(i + 1) == Types.DECIMAL)
-                            fieldTypeNames[i] = String.format("decimal(%d.%d)", prec, scale);
+                            fieldTypeNames[i] = String.format("decimal(%d,%d)", prec, scale);
                     }
                     else if(prec > 0) {
                         if (md.getColumnType(i + 1) == Types.NUMERIC)
