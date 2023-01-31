@@ -57,3 +57,11 @@ java -jar dbtool-1.0.0.jar import --type oracle --host ***:*** --db orcl --user 
 
 java -jar dbtool-1.0.0.jar exec --type oracle --host ***:*** --db orcl --user *** --pass *** --sql "update ..."
 ```
+
+## 查看
+```sh
+     show
+           --input destfile                    # 要导入的数据文件路径
+           --ddl yes                           # <可选> 是否生成表创建语句
+java -jar dbtool-1.6.1.jar show --input '/data/data/raw/shuku/company_staff.20220726' --ddl yes
+```

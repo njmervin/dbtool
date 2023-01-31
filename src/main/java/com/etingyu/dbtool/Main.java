@@ -152,46 +152,51 @@ public class Main {
         if(args.containsKey("feedback"))
             _feedback = Integer.valueOf(args.get("feedback").toString());
 
-        String jdbc = null;
-        if(args.get("type").toString().equalsIgnoreCase("oracle")) {
-            Class.forName("oracle.jdbc.OracleDriver");
-            if(args.containsKey("tns"))
-                jdbc = String.format("jdbc:oracle:thin:@%s", args.get("tns"));
-            else
-                jdbc = String.format("jdbc:oracle:thin:@%s:%s", args.get("host"), args.get("db"));
+        String action = args.get("action").toString();
+        if(action.equalsIgnoreCase("show")) {
+            showSummary();
+        }
+        else {
+            String jdbc = null;
+            if(args.get("type").toString().equalsIgnoreCase("oracle")) {
+                Class.forName("oracle.jdbc.OracleDriver");
+                if(args.containsKey("tns"))
+                    jdbc = String.format("jdbc:oracle:thin:@%s", args.get("tns"));
+                else
+                    jdbc = String.format("jdbc:oracle:thin:@%s:%s", args.get("host"), args.get("db"));
 //            System.out.println(String.format("Oracle: %s", jdbc));
-        }
-        else if(args.get("type").toString().equalsIgnoreCase("mysql")) {
-            Class.forName("com.mysql.cj.jdbc.Driver");
-            jdbc = String.format("jdbc:mysql://%s/%s?useSSL=false&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=UTF-8&zeroDateTimeBehavior=convertToNull", args.get("host"), args.get("db"));
+            }
+            else if(args.get("type").toString().equalsIgnoreCase("mysql")) {
+                Class.forName("com.mysql.cj.jdbc.Driver");
+                jdbc = String.format("jdbc:mysql://%s/%s?useSSL=false&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=UTF-8&zeroDateTimeBehavior=convertToNull", args.get("host"), args.get("db"));
 //            System.out.println(String.format("MySQL: %s", jdbc));
-        }
-        else if(args.get("type").toString().equalsIgnoreCase("postgresql")) {
-            Class.forName("org.postgresql.Driver");
-            jdbc = String.format("jdbc:postgresql://%s/%s", args.get("host"), args.get("db"));
-        }
-        else
-            throw new Exception(String.format("Unsupported db type: %s", args.get("type")));
+            }
+            else if(args.get("type").toString().equalsIgnoreCase("postgresql")) {
+                Class.forName("org.postgresql.Driver");
+                jdbc = String.format("jdbc:postgresql://%s/%s", args.get("host"), args.get("db"));
+            }
+            else
+                throw new Exception(String.format("Unsupported db type: %s", args.get("type")));
 
-        System.out.println(String.format("%s Connect to database ...", getTimestamp()));
-        Connection conn = DriverManager.getConnection(jdbc, args.get("user").toString(), args.get("pass").toString());
-        System.out.println(String.format("%s Connect success.", getTimestamp()));
-        if(args.get("action").toString().equalsIgnoreCase("export"))
-            export(conn);
-        else if(args.get("action").toString().equalsIgnoreCase("export_to_csv"))
-            export_to_csv(conn);
-        else if(args.get("action").toString().equalsIgnoreCase("import")) {
-            if(args.containsKey("batch"))
-                _batch = Integer.parseInt(args.get("batch").toString());
+            System.out.println(String.format("%s Connect to database ...", getTimestamp()));
+            Connection conn = DriverManager.getConnection(jdbc, args.get("user").toString(), args.get("pass").toString());
+            System.out.println(String.format("%s Connect success.", getTimestamp()));
+            if (action.equalsIgnoreCase("export"))
+                export(conn);
+            else if (action.equalsIgnoreCase("export_to_csv"))
+                export_to_csv(conn);
+            else if (action.equalsIgnoreCase("import")) {
+                if (args.containsKey("batch"))
+                    _batch = Integer.parseInt(args.get("batch").toString());
 
-            if(args.containsKey("debugrow"))
-                _debugrow = Integer.parseInt(args.get("debugrow").toString());
+                if (args.containsKey("debugrow"))
+                    _debugrow = Integer.parseInt(args.get("debugrow").toString());
 
-            _import(conn);
+                _import(conn);
+            } else if (action.equalsIgnoreCase("exec"))
+                exec(conn);
+            conn.close();
         }
-        else if(args.get("action").toString().equalsIgnoreCase("exec"))
-            exec(conn);
-        conn.close();
     }
 
     private static void export(Connection conn) throws SQLException, IOException {
@@ -880,8 +885,11 @@ public class Main {
                             if (rows == _debugrow)
                                 System.out.println(String.format("[%d]%s: %s", i + 1, names[i], sVal));
                             if (fieldsMap.containsKey(i) && rows >= start_row) {
-                                if (sVal != null)
-                                    sVal = sVal.replace("\u0000", "");
+                                if(sVal != null) {
+                                    int index = sVal.indexOf('\u0000');
+                                    if (index != -1)
+                                        sVal = sVal.substring(0, index);
+                                }
                                 ps.setString(fieldsMap.get(i) + 1, sVal);
                             }
                             break;
@@ -963,6 +971,75 @@ public class Main {
         ins.close();
 
         System.out.println(String.format("%s Total: %d rows", getTimestamp(), rows));
+    }
+
+
+    private static void showSummary() throws IOException {
+        int rows = 0, total_rows = 0, start_row = 0;
+        long actual_bytes = 0;
+        FieldType[] fieldTypes = null;
+        String[] names = null, fieldTypeNames = null;
+        byte flag;
+        HashMap<Integer, Integer> fieldsMap = new HashMap<>();
+        if(args.containsKey("start"))
+            start_row = Integer.parseInt(args.get("start").toString());
+
+        FileInputStream ins = new FileInputStream(args.get("input").toString());
+
+        //读标识符
+        if(readInteger(ins) != MAGIC_CODE) {
+            System.err.println("Invalid data format");
+            ins.close();
+            return;
+        }
+
+        //写文件格式版本
+        short format = (short) readShort(ins);
+        if(format != FILE_FORMAT) {
+            System.err.println(String.format("File format version '%d' is not support, expect '%d'.", format, FILE_FORMAT));
+            ins.close();
+            return;
+        }
+
+        //读列数量
+        flag = (byte) readByte(ins);
+        fieldTypes = new FieldType[readShort(ins)];
+        names = new String[fieldTypes.length];
+        fieldTypeNames = new String[fieldTypes.length];
+
+        //读列类型和列名
+        for(int i=0; i<fieldTypes.length; i++) {
+            fieldTypes[i] = FieldType.fromInt(readByte(ins));
+            fieldTypeNames[i] = readString(ins, FieldType.SmallString);
+            names[i] = readString(ins, FieldType.SmallString);
+        }
+
+        for(int i=0; i<fieldTypes.length; i++) {
+            System.out.printf("Field #%d: %s %s%n", i + 1, names[i], fieldTypeNames[i]);
+        }
+
+        //读取总行数
+        total_rows = readInteger(ins);
+        System.out.printf("Total rows: %d%n", total_rows);
+        actual_bytes = readLong(ins);
+        DecimalFormat df = new DecimalFormat("#,###");
+        System.out.printf("Total original size: %s bytes%n", df.format(actual_bytes));
+
+        //生成SQL
+        if(args.containsKey("ddl")) {
+            String ddl = args.get("ddl").toString(); //oracle\mysql\postgresql
+            if(ddl.equalsIgnoreCase("yes") || ddl.equalsIgnoreCase("y") || ddl.equalsIgnoreCase("1")) {
+                System.out.println("create table ? (");
+                for(int i=0; i<fieldTypes.length; i++) {
+                    System.out.printf("\t%s %s", names[i], fieldTypeNames[i]);
+                    if(i < fieldTypes.length - 1)
+                        System.out.println(",");
+                    else
+                        System.out.println();
+                }
+                System.out.println(")");
+            }
+        }
     }
 
     private static void exec(Connection conn) throws SQLException {
