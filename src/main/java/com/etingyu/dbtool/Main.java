@@ -668,12 +668,14 @@ public class Main {
     }
 
     private static void _import(Connection conn) throws SQLException, IOException {
-        int rows = 0, total_rows = 0;
+        int rows = 0, total_rows = 0, start_row = 0;
         long actual_bytes = 0;
         FieldType[] fieldTypes = null;
         String[] names = null, fieldTypeNames = null;
         byte flag;
         HashMap<Integer, Integer> fieldsMap = new HashMap<>();
+        if(args.containsKey("start"))
+            start_row = Integer.parseInt(args.get("start").toString());
 
         FileInputStream ins = new FileInputStream(args.get("input").toString());
 
@@ -813,7 +815,9 @@ public class Main {
                 }
 
                 rows += 1;
-                batch += 1;
+
+                if(rows >= start_row)
+                    batch += 1;
 
                 int wasNull;
                 for(int i=0; i<fieldTypes.length; i++) {
@@ -821,7 +825,7 @@ public class Main {
                         case Null:
                             if (rows == _debugrow)
                                 System.out.println(String.format("[%d]%s: null", i + 1, names[i]));
-                            if (fieldsMap.containsKey(i))
+                            if (fieldsMap.containsKey(i) && rows >= start_row)
                                 ps.setNull(fieldsMap.get(i) + 1, Types.NULL);
                             break;
                         case Integer:
@@ -830,12 +834,12 @@ public class Main {
                                 int iVal = readInteger(in);
                                 if (rows == _debugrow)
                                     System.out.println(String.format("[%d]%s: %d", i + 1, names[i], iVal));
-                                if (fieldsMap.containsKey(i))
+                                if (fieldsMap.containsKey(i) && rows >= start_row)
                                     ps.setInt(fieldsMap.get(i) + 1, iVal);
                             } else {
                                 if (rows == _debugrow)
                                     System.out.println(String.format("[%d]%s: null", i + 1, names[i]));
-                                if (fieldsMap.containsKey(i))
+                                if (fieldsMap.containsKey(i) && rows >= start_row)
                                     ps.setNull(fieldsMap.get(i) + 1, Types.INTEGER);
                             }
                             break;
@@ -845,12 +849,12 @@ public class Main {
                                 long lVal = readLong(in);
                                 if (rows == _debugrow)
                                     System.out.println(String.format("[%d]%s: %d", i + 1, names[i], lVal));
-                                if (fieldsMap.containsKey(i))
+                                if (fieldsMap.containsKey(i) && rows >= start_row)
                                     ps.setLong(fieldsMap.get(i) + 1, lVal);
                             } else {
                                 if (rows == _debugrow)
                                     System.out.println(String.format("[%d]%s: null", i + 1, names[i]));
-                                if (fieldsMap.containsKey(i))
+                                if (fieldsMap.containsKey(i) && rows >= start_row)
                                     ps.setNull(fieldsMap.get(i) + 1, Types.BIGINT);
                             }
                             break;
@@ -858,12 +862,12 @@ public class Main {
                             wasNull = readByte(in);
                             if (wasNull == 0) {
                                 double fVal = readDouble(in);
-                                if (rows == _debugrow)
+                                if (rows == _debugrow && rows >= start_row)
                                     System.out.println(String.format("[%d]%s: %f", i + 1, names[i], fVal));
                                 if (fieldsMap.containsKey(i))
                                     ps.setDouble(fieldsMap.get(i) + 1, fVal);
                             } else {
-                                if (rows == _debugrow)
+                                if (rows == _debugrow && rows >= start_row)
                                     System.out.println(String.format("[%d]%s: null", i + 1, names[i]));
                                 if (fieldsMap.containsKey(i))
                                     ps.setNull(fieldsMap.get(i) + 1, Types.DECIMAL);
@@ -875,8 +879,11 @@ public class Main {
                             String sVal = readString(in, fieldTypes[i]);
                             if (rows == _debugrow)
                                 System.out.println(String.format("[%d]%s: %s", i + 1, names[i], sVal));
-                            if (fieldsMap.containsKey(i))
+                            if (fieldsMap.containsKey(i) && rows >= start_row) {
+                                if (sVal != null)
+                                    sVal = sVal.replace("\u0000", "");
                                 ps.setString(fieldsMap.get(i) + 1, sVal);
+                            }
                             break;
                         case Date:
                             Date dateVal = readDate(in);
@@ -886,7 +893,7 @@ public class Main {
                                 else
                                     System.out.println(String.format("[%d]%s: null", i + 1, names[i]));
                             }
-                            if (fieldsMap.containsKey(i))
+                            if (fieldsMap.containsKey(i) && rows >= start_row)
                                 ps.setDate(fieldsMap.get(i) + 1, dateVal != null ? new java.sql.Date(dateVal.getTime()) : null);
                             break;
                         case DateTime:
@@ -897,7 +904,7 @@ public class Main {
                                 else
                                     System.out.println(String.format("[%d]%s: null", i + 1, names[i]));
                             }
-                            if (fieldsMap.containsKey(i))
+                            if (fieldsMap.containsKey(i) && rows >= start_row)
                                 ps.setTimestamp(fieldsMap.get(i) + 1, dtVal != null ? new Timestamp(dtVal.getTime()) : null);
                             break;
                         case SmallBinary:
@@ -910,7 +917,7 @@ public class Main {
                                 else
                                     System.out.println(String.format("[%d]%s: null", i + 1, names[i]));
                             }
-                            if (fieldsMap.containsKey(i)) {
+                            if (fieldsMap.containsKey(i) && rows >= start_row) {
                                 if (blob_data == null)
                                     ps.setNull(fieldsMap.get(i) + 1, Types.VARBINARY);
                                 else {
@@ -923,7 +930,8 @@ public class Main {
                     }
                 }
 
-                ps.addBatch();
+                if(rows >= start_row)
+                    ps.addBatch();
 
                 if(batch >= _batch) {
                     ps.executeBatch();

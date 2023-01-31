@@ -39,6 +39,7 @@ java -jar dbtool-1.0.0.jar export --type oracle --host ***:*** --db orcl --user 
            --batch N                           # <可选> 批量提交的行数，默认为 1000
            --debugrow N                        # <可选> 设置输出第N行每列的详细数据
            --input destfile                    # 要导入的数据文件路径
+		   --start N                           # <可选> 从第N行开始导入
 
 java -jar dbtool-1.0.0.jar import --type oracle --host ***:*** --db orcl --user *** --pass *** --table *** --batch 1000 --input "D:\data\***.dat"
 ```
