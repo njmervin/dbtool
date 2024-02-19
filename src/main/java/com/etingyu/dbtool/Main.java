@@ -256,9 +256,12 @@ public class Main {
                     fieldTypeNames[i] = "null";
                     break;
                 case Types.INTEGER:
+                case Types.SMALLINT:
                 case Types.TINYINT:
                     if(md.getColumnType(i + 1) == Types.INTEGER)
                         fieldTypeNames[i] = "int";
+                    else if(md.getColumnType(i + 1) == Types.SMALLINT)
+                        fieldTypeNames[i] = "smallint";
                     else if(md.getColumnType(i + 1) == Types.TINYINT)
                         fieldTypeNames[i] = "tinyint";
                     fieldTypes[i] = FieldType.Integer;
@@ -523,6 +526,7 @@ public class Main {
                     fieldTypes[i] = FieldType.Null;
                     break;
                 case Types.INTEGER:
+                case Types.SMALLINT:
                 case Types.TINYINT:
                     fieldTypes[i] = FieldType.Integer;
                     break;
