@@ -766,8 +766,12 @@ public class Main {
                     fieldsMap.put(map.get(parts[0].toLowerCase()), field_count);
                     if (field_count > 0)
                         sql.append(",");
-                    if(parts.length == 1)
-                        sql.append(parts[0]);
+                    if(parts.length == 1) {
+                        if(args.get("type").toString().equalsIgnoreCase("mysql"))
+                            sql.append("`").append(parts[0]).append("`");
+                        else
+                            sql.append(parts[0]);
+                    }
                     else
                         sql.append(parts[1]);
                     field_count += 1;
