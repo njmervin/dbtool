@@ -4,13 +4,14 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.Date;
 import java.sql.*;
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
-import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -716,9 +717,9 @@ public class Main {
             names[i] = readString(ins, FieldType.SmallString);
         }
 
-        for(int i=0; i<fieldTypes.length; i++) {
-            System.out.printf("Field #%d: %s %s%n", i + 1, names[i], fieldTypeNames[i]);
-        }
+//        for(int i=0; i<fieldTypes.length; i++) {
+//            System.out.printf("Field #%d: %s %s%n", i + 1, names[i], fieldTypeNames[i]);
+//        }
 
         //读取总行数
         total_rows = readInteger(ins);
@@ -790,6 +791,44 @@ public class Main {
                 sql.append("?");
             }
             sql.append(")");
+
+            if(args.containsKey("upset") && args.get("type").toString().equalsIgnoreCase("postgresql")) {
+                HashSet<String> pkFields = new HashSet();
+                for(String s : args.get("upset").toString().split(",")) {
+                    pkFields.add(s.trim().toLowerCase());
+                }
+
+                sql.append(" ON CONFLICT(").append(args.get("upset").toString()).append(") DO UPDATE SET ");
+                int n = 0;
+                for(String s : args.get("fields").toString().split(",")) {
+                    String[] parts =  s.trim().split("->");
+                    parts[0] = parts[0].trim();
+                    if(parts.length  == 1 && parts[0].isEmpty())
+                        continue;
+
+                    if(parts.length > 1)
+                        parts[1] = parts[1].trim();
+
+                    if(map.containsKey(parts[0])) {
+                        if(parts.length == 1) {
+                            if(!pkFields.contains(parts[0].toLowerCase())) {
+                                if (n > 0)
+                                    sql.append(",");
+                                n += 1;
+                                sql.append(parts[0]).append("=EXCLUDED.").append(parts[0]);
+                            }
+                        }
+                        else {
+                            if(!pkFields.contains(parts[1].toLowerCase())) {
+                                if (n > 0)
+                                    sql.append(",");
+                                n += 1;
+                                sql.append(parts[1]).append("=EXCLUDED.").append(parts[1]);
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         if(_limit <= 0) {
