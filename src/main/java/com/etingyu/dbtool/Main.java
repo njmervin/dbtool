@@ -129,7 +129,7 @@ public class Main {
      *      --pass test
      *      --sql "update sql"
      */
-    public static void main(String[] _args) throws Exception {
+    public static void main(String[] _args) {
         for(int i=0; i<_args.length; i++) {
             if(i == 0) {
                 args.put("action", _args[0]);
@@ -143,15 +143,20 @@ public class Main {
             }
         }
 
-        process();
+        try {
+            process();
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.exit(1);
+        }
     }
 
     private static void process() throws Exception {
         if(args.containsKey("limit"))
-            _limit = Integer.valueOf(args.get("limit").toString());
+            _limit = Integer.parseInt(args.get("limit").toString());
 
         if(args.containsKey("feedback"))
-            _feedback = Integer.valueOf(args.get("feedback").toString());
+            _feedback = Integer.parseInt(args.get("feedback").toString());
 
         String action = args.get("action").toString();
         if(action.equalsIgnoreCase("show")) {
