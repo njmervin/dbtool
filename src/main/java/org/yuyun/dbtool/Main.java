@@ -1,5 +1,7 @@
 package org.yuyun.dbtool;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -73,7 +75,10 @@ public class Main {
                 i += 1;
                 if(i >= _args.length)
                     throw new RuntimeException(String.format("argument %s has no value specified", arg));
-                args.put(arg, _args[i]);
+                String value = _args[i];
+                if(value.startsWith("base64:"))
+                    value = new String(Base64.getDecoder().decode(value.substring(7)), StandardCharsets.UTF_8);
+                args.put(arg, value);
             }
             else if(_args[i].startsWith("-")) {
                 String arg = _args[i].substring(1);
