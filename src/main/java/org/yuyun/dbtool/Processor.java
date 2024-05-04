@@ -1,6 +1,8 @@
 package org.yuyun.dbtool;
 
+import org.yuyun.dbtool.db.MySQLDB;
 import org.yuyun.dbtool.db.OracleDB;
+import org.yuyun.dbtool.db.PostgreSQLDB;
 
 import java.io.*;
 import java.lang.reflect.Modifier;
@@ -213,9 +215,9 @@ public abstract class Processor {
             case Oracle:
                 return new OracleDB().getTableDDL(conn, tableName);
             case MySQL:
-                break;
+                return new MySQLDB().getTableDDL(conn, tableName);
             case PostgreSQL:
-                break;
+                return new PostgreSQLDB().getTableDDL(conn, tableName);
         }
         return null;
     }
