@@ -430,6 +430,10 @@ public abstract class Processor {
         return this.conn;
     }
 
+    protected DBType getDbType() {
+        return this.dbType;
+    }
+
     protected void processDataFile(String filename, DataFileProcessor fp, int feedback) throws IOException {
         int rows = 0, totalRows = 0, startRow = 0;
         long actualBytes = 0;
@@ -473,7 +477,7 @@ public abstract class Processor {
         startRow = fp.getStartRow();
 
         try {
-            int batch = 0;
+            int totalProcRows = 0;
             Object[] rowData = new Object[fieldTypeNames.length];
             ByteArrayInputStream bytesChuck = new ByteArrayInputStream(new byte[StartFlag.EOF.ordinal()]);
             DataFile chunk = new DataFile(new DataInputStream(bytesChuck));
@@ -564,13 +568,16 @@ public abstract class Processor {
                         printMsg(LogLevel.INFO, String.format("%d rows, %.4g%% ...", rows, ((int)(rows * 10000.0 / totalRows)) / 100.0));
                     }
 
-                    if (!fp.onRow(rows, rowData))
+                    totalProcRows += 1;
+                    if (!fp.onRow(rows, rowData)) {
+                        fp.onRowEnd(totalProcRows);
                         return;
+                    }
                 }
             }
 
             printMsg(LogLevel.INFO, String.format("%d rows, %.4g%% ...", rows, ((int)(rows * 10000.0 / totalRows)) / 100.0));
-            fp.onRowEnd();
+            fp.onRowEnd(totalProcRows);
         }
         finally {
             in.close();

@@ -73,10 +73,6 @@ public class ExportProcessor extends Processor{
         printMsg(LogLevel.INFO, String.format("SQL: %s", sql));
 
         exportData(sql);
-
-//        System.out.println(getTableDDL("rpt_researchreport"));
-//        System.out.println(getTableDDL("TEMP_IDS"));
-//        System.out.println(this.getTableDDL("scott.emp"));
     }
 
     private void exportData(String sql) throws SQLException, IOException {

@@ -150,6 +150,6 @@ public class ShowProcessor extends Processor implements DataFileProcessor{
     }
 
     @Override
-    public void onRowEnd() {
+    public void onRowEnd(int rows) {
     }
 }
