@@ -29,13 +29,13 @@ public class ExportProcessor extends Processor{
 
     /**
      * export
-     *     --table      <可选>表名
-     *     --sql        <可选>完整的SQL语句
-     *     --fields     <可选>要导出的字段列表，如果未设置，则导出所有列
-     *     --where      <可选>导出数据的条件和排序，如果未设置，则导出所有行
-     *     --limit      <可选>限制导出的行数，如果未设置，则导出所有行
-     *     --feedback   <可选>每多少行显示进度提示，默认为10000行
-     *     --output     目标数据文件路径
+     *     --table S    <可选>表名
+     *     --sql S      <可选>完整的SQL语句
+     *     --fields S   <可选>要导出的字段列表，如果未设置，则导出所有列
+     *     --where S    <可选>导出数据的条件和排序，如果未设置，则导出所有行
+     *     --limit N    <可选>限制导出的行数，如果未设置，则导出所有行
+     *     --feedback N <可选>每多少行显示进度提示，默认为10000行
+     *     --output S   目标数据文件路径
      */
     @Override
     public void parseArguments(Map<String, String> args) {
@@ -70,7 +70,7 @@ public class ExportProcessor extends Processor{
             }
             sql = sb.toString();
         }
-        printMsg(String.format("SQL: %s", sql));
+        printMsg(LogLevel.INFO, String.format("SQL: %s", sql));
 
         exportData(sql);
 
@@ -85,7 +85,7 @@ public class ExportProcessor extends Processor{
 
         //导出
         Statement stmt = this.getConnection().createStatement();
-        printMsg("Execute query ...");
+        printMsg(LogLevel.INFO, "Execute query ...");
         ResultSet rs = stmt.executeQuery(sql);
         ResultSetMetaData md = rs.getMetaData();
         fieldTypes = new FieldType[md.getColumnCount()];
@@ -118,7 +118,7 @@ public class ExportProcessor extends Processor{
         for(int i=0; i<fieldTypes.length; i++) {
             int prec = md.getPrecision(i + 1);
             int scale = md.getScale(i + 1);
-
+//            System.out.println(md.getColumnName(i + 1) + "=>" + md.getColumnType(i + 1));
             switch (md.getColumnType(i + 1)) {
                 case Types.NULL:
                     fieldTypes[i] = FieldType.Null;
@@ -213,7 +213,6 @@ public class ExportProcessor extends Processor{
                 case Types.VARBINARY:
                 case Types.ROWID:
                     fieldTypeNames[i] = String.format("varbinary(%d)", prec);
-
                     if(prec <= Byte.MAX_VALUE)
                         fieldTypes[i] = FieldType.SmallBinary;
                     else if(prec <= Short.MAX_VALUE)
@@ -224,11 +223,10 @@ public class ExportProcessor extends Processor{
                 case Types.LONGVARBINARY:
                 case Types.BLOB:
                     fieldTypeNames[i] = String.format("varbinary(%d)", prec);
-
                     fieldTypes[i] = FieldType.LongBinary;
                     break;
                 default:
-                    printMsg(String.format("Unsupport field '%s' data type: %d: %s", md.getColumnLabel(i + 1), md.getColumnType(i + 1), md.getColumnTypeName(i + 1)));
+                    throw new RuntimeException(String.format("Unsupport field '%s' data type: %d: %s", md.getColumnLabel(i + 1), md.getColumnType(i + 1), md.getColumnTypeName(i + 1)));
             }
 
             //写列类型
@@ -244,7 +242,7 @@ public class ExportProcessor extends Processor{
         file.writeInteger(0); //总行数
         file.writeLong(0); //实际文件大小
 
-        printMsg("Start ...");
+        printMsg(LogLevel.INFO, "Start ...");
 
         int batch = 0;
         int rows = 0;
@@ -323,7 +321,7 @@ public class ExportProcessor extends Processor{
             }
 
             if((rows % argFeedback) == 0) {
-                printMsg(String.format("%d rows ...", rows));
+                printMsg(LogLevel.INFO, String.format("%d rows ...", rows));
             }
             if(rows >= argLimit)
                 break;
@@ -342,9 +340,9 @@ public class ExportProcessor extends Processor{
         file.writeLong(actual_bytes);
         file.close();
 
-        printMsg(String.format("Total: %d rows", rows));
+        printMsg(LogLevel.INFO, String.format("Total: %d rows", rows));
         DecimalFormat df = new DecimalFormat("#,###");
-        printMsg(String.format("Total original size: %s bytes", df.format(actual_bytes)));
+        printMsg(LogLevel.INFO, String.format("Total original size: %s bytes", df.format(actual_bytes)));
 
         rs.close();
         stmt.close();

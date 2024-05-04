@@ -1,8 +1,6 @@
 package org.yuyun.dbtool;
 
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.lang.reflect.Modifier;
 import java.sql.*;
 import java.text.SimpleDateFormat;
@@ -15,7 +13,7 @@ public abstract class Processor {
 
     private DBType dbType = DBType.None;
     private Connection conn = null; //数据库连接
-    private SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    private static SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
     public static void process(Map<String, String> args) throws Exception {
         //初始化处理器
@@ -110,6 +108,16 @@ public abstract class Processor {
         } catch (NumberFormatException e) {
             throw new RuntimeException(String.format("The parameter %s is not a valid integer: %s", name, s), e);
         }
+    }
+
+    protected boolean checkOptionalArgumentBool(Map<String, String> args, String name, boolean fallback) {
+        String s = checkOptionalArgumentString(args, name, fallback ? "yes" : "no");
+        if(isStringIn(s, true, Arrays.asList("y", "yes", "on", "true", "1")))
+            return true;
+        else if(isStringIn(s, true, Arrays.asList("n", "no", "off", "false", "0")))
+            return false;
+        else
+            throw new RuntimeException(String.format("The parameter %s is not a valid bool: %s", name, s));
     }
 
     /**
@@ -394,14 +402,179 @@ public abstract class Processor {
         return null;
     }
 
-    protected void printMsg(String msg) {
-        System.out.print(df.format(Calendar.getInstance().getTime()));
-        System.out.print(" ");
-        System.out.println(msg);
+    public static void printMsg(LogLevel level, String msg) {
+        PrintStream out = null;
+
+        switch (level) {
+            case DEBUG:
+            case INFO:
+                out = System.out;
+                break;
+            case WARN:
+            case ERROR:
+                out = System.err;
+                break;
+        }
+
+        out.print(df.format(Calendar.getInstance().getTime()));
+        out.printf(" [%s] ", level.name());
+        out.println(msg);
+    }
+
+    public static void printMsg(Throwable e) {
+        printMsg(LogLevel.ERROR, e.getMessage());
+        e.printStackTrace(System.err);
     }
 
     protected Connection getConnection() {
         return this.conn;
+    }
+
+    protected void processDataFile(String filename, DataFileProcessor fp, int feedback) throws IOException {
+        int rows = 0, totalRows = 0, startRow = 0;
+        long actualBytes = 0;
+        String ddl = null;
+        FieldType[] fieldTypes = null;
+        String[] names = null, fieldTypeNames = null;
+        byte flag;
+//        HashMap<Integer, Integer> fieldsMap = new HashMap<>();
+//        if(args.containsKey("start"))
+//            start_row = Integer.parseInt(args.get("start").toString());
+
+        DataFile in = new DataFile(filename, "r");
+        in.checkFileHeader();
+
+        //读取ddl
+        flag = (byte) in.readByte();
+        if(flag == StartFlag.DDL.ordinal()) {
+            ddl = in.readString(FieldType.MediumString);
+            flag = (byte) in.readByte();
+        }
+
+        //读取列信息
+        fieldTypes = new FieldType[in.readShort()];
+        names = new String[fieldTypes.length];
+        fieldTypeNames = new String[fieldTypes.length];
+
+        //读列类型和列名
+        for(int i=0; i<fieldTypes.length; i++) {
+            fieldTypes[i] = FieldType.fromInt(in.readByte());
+            fieldTypeNames[i] = in.readString(FieldType.SmallString);
+            names[i] = in.readString(FieldType.SmallString);
+        }
+
+        //读取总行数
+        totalRows = in.readInteger();
+        actualBytes = in.readLong();
+
+        if(!fp.onSummary(ddl, fieldTypes.length, names, fieldTypes, fieldTypeNames, totalRows, actualBytes))
+            return;
+
+        startRow = fp.getStartRow();
+
+        try {
+            int batch = 0;
+            Object[] rowData = new Object[fieldTypeNames.length];
+            ByteArrayInputStream bytesChuck = new ByteArrayInputStream(new byte[StartFlag.EOF.ordinal()]);
+            DataFile chunk = new DataFile(new DataInputStream(bytesChuck));
+
+            while (true){
+                //读取缓冲区
+                flag = (byte) chunk.readByte();
+                if (flag != StartFlag.DataRow.ordinal()) {
+                    //缓冲区为空，从文件读取下一缓冲区
+                    flag = (byte)in.readByte();
+                    if(flag != StartFlag.DataRow.ordinal())
+                        break;
+
+                    bytesChuck = new ByteArrayInputStream(in.readCompressBinary());
+                    chunk = new DataFile(new DataInputStream(bytesChuck));
+
+                    //读取缓冲区
+                    flag = (byte) chunk.readByte();
+                }
+
+                rows += 1;
+
+//                if(rows >= startRow)
+//                    batch += 1;
+
+                for(int i=0; i<fieldTypes.length; i++) {
+                    if (rows >= startRow)
+                        rowData[i] = null;
+                    switch (fieldTypes[i]) {
+                        case Null:
+                            break;
+                        case Integer:
+                            if (chunk.readByte() == 0) {
+                                int iVal = chunk.readInteger();
+                                if (rows >= startRow)
+                                    rowData[i] = iVal;
+                            }
+                            break;
+                        case Long:
+                            if (chunk.readByte() == 0) {
+                                long lVal = chunk.readLong();
+                                if (rows >= startRow)
+                                    rowData[i] = lVal;
+                            }
+                            break;
+                        case Double:
+                            if (chunk.readByte() == 0) {
+                                double fVal = chunk.readDouble();
+                                if (rows >= startRow)
+                                    rowData[i] = fVal;
+                            }
+                            break;
+                        case SmallString:
+                        case MediumString:
+                        case LongString:
+                            String sVal = chunk.readString(fieldTypes[i]);
+                            if (rows >= startRow) {
+                                if(sVal != null) {
+                                    int index = sVal.indexOf('\u0000');
+                                    if (index != -1)
+                                        sVal = sVal.substring(0, index);
+                                }
+                                rowData[i] = sVal;
+                            }
+                            break;
+                        case Date:
+                            java.util.Date dateVal = chunk.readDate();
+                            if (rows >= startRow)
+                                rowData[i] = dateVal;
+                            break;
+                        case DateTime:
+                            java.util.Date dtVal = chunk.readDateTime();
+                            if (rows >= startRow)
+                                rowData[i] = dtVal;
+                            break;
+                        case SmallBinary:
+                        case MediumBinary:
+                        case LongBinary:
+                            byte[] blob = chunk.readBinary(fieldTypes[i]);
+                            if (rows >= startRow)
+                                rowData[i] = blob;
+                            break;
+                    }
+                }
+
+                if (rows >= startRow) {
+                    if ((rows % feedback) == 0) {
+                        printMsg(LogLevel.INFO, String.format("%d rows, %.4g%% ...", rows, ((int)(rows * 10000.0 / totalRows)) / 100.0));
+                    }
+
+                    if (!fp.onRow(rows, rowData))
+                        return;
+                }
+            }
+
+            printMsg(LogLevel.INFO, String.format("%d rows, %.4g%% ...", rows, ((int)(rows * 10000.0 / totalRows)) / 100.0));
+            fp.onRowEnd();
+        }
+        finally {
+            in.close();
+        }
     }
 
     /**

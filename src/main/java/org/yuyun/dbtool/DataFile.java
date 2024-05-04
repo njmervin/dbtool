@@ -8,6 +8,8 @@ import java.sql.SQLException;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
+import static org.yuyun.dbtool.Processor.*;
+
 public class DataFile {
     private RandomAccessFile file = null;
     private DataOutput out = null;
@@ -25,6 +27,28 @@ public class DataFile {
     public DataFile(DataOutputStream os) {
         this.out = os;
         bb.mark();
+    }
+
+    public DataFile(DataInputStream is) {
+        this.in = is;
+        bb.mark();
+    }
+
+    public void checkFileHeader() throws IOException {
+        //读标识符
+        if(readInteger() != MAGIC_CODE) {
+            printMsg(LogLevel.ERROR, "Invalid data format");
+            close();
+            System.exit(1);
+        }
+
+        //写文件格式版本
+        short format = (short) readShort();
+        if(format != FILE_FORMAT) {
+            printMsg(LogLevel.ERROR, String.format("File format version '%d' is not support, expect '%d'.", format, FILE_FORMAT));
+            close();
+            System.exit(1);
+        }
     }
 
     public long getFilePointer() throws IOException {

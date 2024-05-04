@@ -89,7 +89,7 @@ public class Main {
         try {
             Processor.process(args);
         } catch (Throwable e) {
-            e.printStackTrace();
+            Processor.printMsg(e);
             System.exit(1);
         }
     }
