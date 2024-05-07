@@ -165,7 +165,7 @@ public class ImportProcessor extends Processor implements DataFileProcessor {
         sb.append(")");
         if(argUpset != null && !argUpset.isEmpty()) {
             if(this.getDbType().equals(DBType.PostgreSQL)) {
-                sb.append("\nON CONFLICT(").append(argUpset).append(") DO UPDATE SET");
+                sb.append("\nON CONFLICT(").append(argUpset).append(") DO UPDATE SET ");
                 for(int i=0; i<targetFieldNames.size(); i++) {
                     if(i > 0)
                         sb.append(",");
