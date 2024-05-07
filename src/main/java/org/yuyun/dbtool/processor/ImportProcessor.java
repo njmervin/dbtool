@@ -1,4 +1,9 @@
-package org.yuyun.dbtool;
+package org.yuyun.dbtool.processor;
+
+import org.yuyun.dbtool.DBType;
+import org.yuyun.dbtool.DataFileProcessor;
+import org.yuyun.dbtool.FieldType;
+import org.yuyun.dbtool.LogLevel;
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -6,7 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class ImportProcessor extends Processor implements DataFileProcessor{
+public class ImportProcessor extends Processor implements DataFileProcessor {
     private String argTableName;
     private int argLimit;
     private int argFeedback;
@@ -274,6 +279,8 @@ public class ImportProcessor extends Processor implements DataFileProcessor{
             }
             getConnection().setAutoCommit(true);
             printMsg(LogLevel.INFO, String.format("Total: %d rows", rows));
+
+            this.setResultInfo("rows", rows);
         } catch (SQLException e) {
             printMsg(LogLevel.ERROR, "Import failed after last row");
             printMsg(e);

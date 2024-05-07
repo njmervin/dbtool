@@ -8,7 +8,7 @@ import java.sql.SQLException;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
-import static org.yuyun.dbtool.Processor.*;
+import static org.yuyun.dbtool.processor.Processor.*;
 
 public class DataFile {
     private RandomAccessFile file = null;

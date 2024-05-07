@@ -1,30 +1,54 @@
-package org.yuyun.dbtool;
+package org.yuyun.dbtool.processor;
 
+import com.google.common.reflect.ClassPath;
+import com.google.gson.Gson;
+import org.yuyun.dbtool.*;
 import org.yuyun.dbtool.db.MySQLDB;
 import org.yuyun.dbtool.db.OracleDB;
 import org.yuyun.dbtool.db.PostgreSQLDB;
 
 import java.io.*;
 import java.lang.reflect.Modifier;
-import java.sql.*;
+import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.text.SimpleDateFormat;
 import java.util.*;
-import java.util.stream.Collectors;
 
 public abstract class Processor {
-    protected static final int MAGIC_CODE = 0x89ABCDEF;
-    protected static final short FILE_FORMAT = 0x2;
+    public static final int MAGIC_CODE = 0x89ABCDEF;
+    public static final short FILE_FORMAT = 0x2;
+    private static final SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
     private DBType dbType = DBType.None;
     private Connection conn = null; //数据库连接
-    private static SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    private final Map<String, Object> result = new HashMap<>(); //处理结果数据
 
     public static void process(Map<String, String> args) throws Exception {
+        String jsonfile = args.get("log");
+
+        //解析日志文件名参数
+        if(jsonfile != null) {
+            jsonfile = jsonfile.trim();
+            if(jsonfile.isEmpty())
+                jsonfile = null;
+        }
+
         //初始化处理器
         Map<String, Processor> processors = findAllProcesser();
         Processor processor = processors.get(args.get("action"));
         if(processor == null)
             throw new RuntimeException(String.format("Unsupported processing instruction: %s", args.get("action")));
+
+        //预删除结果文件
+        if(jsonfile != null) {
+            File file = new File(jsonfile);
+            if(file.exists()) {
+                if(!file.delete())
+                    throw new RuntimeException(String.format("Can't delete log file: %s", jsonfile));
+            }
+        }
 
         //处理数据库连接命令行
         if(processor.isConnectionUsed())
@@ -34,9 +58,37 @@ public abstract class Processor {
         processor.parseArguments(args);
 
         //处理
+        Map<String, Object> op = new HashMap<>();
+        long tick = System.currentTimeMillis();
         try {
+            op.put("start", df.format(Calendar.getInstance().getTime()));
             processor.process();
-        } finally {
+            op.put("end", df.format(Calendar.getInstance().getTime()));
+            op.put("cost", System.currentTimeMillis() - tick);
+
+            op.put("code", 0);
+        }catch (Throwable e) {
+            op.put("end", df.format(Calendar.getInstance().getTime()));
+            op.put("cost", System.currentTimeMillis() - tick);
+
+            op.put("code", -1);
+            op.put("msg", e.getMessage());
+
+            StringWriter w = new StringWriter();
+            e.printStackTrace(new PrintWriter(w));
+            op.put("debug", w.toString());
+
+            throw e;
+        }finally {
+            if(jsonfile != null) {
+                if(args.containsKey("timestamp"))
+                    op.put("timestamp", args.get("timestamp").trim());
+                op.put("data", processor.result);
+                FileOutputStream os = new FileOutputStream(jsonfile);
+                os.write(new Gson().toJson(op).getBytes(StandardCharsets.UTF_8));
+                os.close();
+            }
+
             if(processor.conn != null) {
                 processor.conn.close();
             }
@@ -48,16 +100,12 @@ public abstract class Processor {
      * 初始化处理器类
      * @return 处理器类列表
      */
-    public static Map<String, Processor> findAllProcesser() throws ClassNotFoundException, InstantiationException, IllegalAccessException {
+    public static Map<String, Processor> findAllProcesser() throws ClassNotFoundException, InstantiationException, IllegalAccessException, IOException {
         Map<String, Processor> map = new HashMap<>();
-        String packageName = Main.class.getPackage().getName();
-        InputStream stream = ClassLoader.getSystemClassLoader()
-                .getResourceAsStream(packageName.replaceAll("[.]", "/"));
-        BufferedReader reader = new BufferedReader(new InputStreamReader(stream));
-        Set<String> classFileNames = reader.lines().filter(line -> line.endsWith(".class")).collect(Collectors.toSet());
-        for(String classFileName : classFileNames) {
-            String className = packageName + "." + classFileName.substring(0, classFileName.lastIndexOf('.'));
-            Class<?> _class = Class.forName(className);
+
+        ClassPath cp=ClassPath.from(Thread.currentThread().getContextClassLoader());
+        for(ClassPath.ClassInfo info : cp.getTopLevelClassesRecursive("org.yuyun.dbtool.processor")) {
+            Class<?> _class = Class.forName(info.getName());
             if(!Modifier.isAbstract(_class.getModifiers()) && Processor.class.isAssignableFrom(_class)) {
                 Processor processor = (Processor) _class.newInstance();
                 map.put(processor.getActionName(), processor);
@@ -252,6 +300,10 @@ public abstract class Processor {
 
     protected DBType getDbType() {
         return this.dbType;
+    }
+
+    protected void setResultInfo(String key, Object value) {
+        this.result.put(key, value);
     }
 
     protected void processDataFile(String filename, DataFileProcessor fp, int feedback) throws IOException {

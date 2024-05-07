@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import static org.yuyun.dbtool.Processor.isStringIn;
+import static org.yuyun.dbtool.processor.Processor.isStringIn;
 
 public class OracleDB implements RelationalDB {
     @Override

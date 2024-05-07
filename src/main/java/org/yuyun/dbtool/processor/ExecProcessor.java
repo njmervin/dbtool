@@ -1,4 +1,6 @@
-package org.yuyun.dbtool;
+package org.yuyun.dbtool.processor;
+
+import org.yuyun.dbtool.LogLevel;
 
 import java.sql.Statement;
 import java.util.Map;
@@ -32,6 +34,7 @@ public class ExecProcessor extends Processor{
         printMsg(LogLevel.INFO, String.format("Start execute: %s...", sql));
         int affected = stmt.executeUpdate(sql);
         printMsg(LogLevel.INFO, String.format("Affect %d rows.", affected));
+        this.setResultInfo("rows", affected);
         stmt.close();
     }
 }

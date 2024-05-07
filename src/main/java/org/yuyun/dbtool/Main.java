@@ -1,5 +1,7 @@
 package org.yuyun.dbtool;
 
+import org.yuyun.dbtool.processor.Processor;
+
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.HashMap;

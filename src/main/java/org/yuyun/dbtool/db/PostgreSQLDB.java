@@ -1,6 +1,7 @@
 package org.yuyun.dbtool.db;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.SQLException;
 
 public class PostgreSQLDB implements RelationalDB{
     @Override

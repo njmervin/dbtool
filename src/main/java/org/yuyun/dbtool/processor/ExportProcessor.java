@@ -1,4 +1,9 @@
-package org.yuyun.dbtool;
+package org.yuyun.dbtool.processor;
+
+import org.yuyun.dbtool.DataFile;
+import org.yuyun.dbtool.FieldType;
+import org.yuyun.dbtool.LogLevel;
+import org.yuyun.dbtool.StartFlag;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -339,6 +344,9 @@ public class ExportProcessor extends Processor{
         printMsg(LogLevel.INFO, String.format("Total: %d rows", rows));
         DecimalFormat df = new DecimalFormat("#,###");
         printMsg(LogLevel.INFO, String.format("Total original size: %s bytes", df.format(actual_bytes)));
+
+        this.setResultInfo("rows", rows);
+        this.setResultInfo("size", actual_bytes);
 
         rs.close();
         stmt.close();

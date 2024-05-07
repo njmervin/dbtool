@@ -1,10 +1,13 @@
-package org.yuyun.dbtool;
+package org.yuyun.dbtool.processor;
+
+import org.yuyun.dbtool.DataFileProcessor;
+import org.yuyun.dbtool.FieldType;
 
 import java.text.DecimalFormat;
 import java.text.SimpleDateFormat;
 import java.util.Map;
 
-public class ShowProcessor extends Processor implements DataFileProcessor{
+public class ShowProcessor extends Processor implements DataFileProcessor {
     private static final String SECTION_TEXT = "================================================================================";
     private static final String EMPTY_TEXT = "                                                                                ";
     private String argInput;

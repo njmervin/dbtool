@@ -21,8 +21,24 @@
            --limit N                           # <可选> 限制导出的行数，如果未设置，则导出所有行
            --feedback N                        # <可选> 每多少行显示进度提示，默认为 10000
            --output destfile                   # 目标数据文件路径
-
+           --log logfile                       # <可选> 日志JSON文件路径
+           --timestamp TS                      # <可选> 日志JSON文件中操作文本型时间戳
+           
 java -jar dbtool-1.0.0.jar export --type oracle --host ***:*** --db orcl --user *** --pass *** --table *** --output "D:\data\***.dat"
+```
+### 日志文件
+```json
+{
+  "code": 0,
+  "timestamp": "abc",
+  "start": "2024-05-07 20:41:58",
+  "end": "2024-05-07 20:41:58",
+  "cost": 25, //总耗时（毫秒）
+  "data": {
+    "size": 3081, //原始文件大小
+    "rows": 1 //导出总行数
+  }
+}
 ```
 
 ## 导入
@@ -49,8 +65,23 @@ java -jar dbtool-1.0.0.jar export --type oracle --host ***:*** --db orcl --user 
            --input destfile                    # 要导入的数据文件路径
 		   --start N                           # <可选> 从第N行开始导入，默认从第一行开始导入
 		   --upset "primary key"               # <可选> 根据唯一约束进行更新，需设置约束字段
-
+           --log logfile                       # <可选> 日志JSON文件路径
+           --timestamp TS                      # <可选> 日志JSON文件中操作文本型时间戳
+           
 java -jar dbtool-1.0.0.jar import --type oracle --host ***:*** --db orcl --user *** --pass *** --table *** --input "D:\data\***.dat"
+```
+### 日志文件
+```json
+{
+  "code": 0,
+  "timestamp": "abc",
+  "start": "2024-05-07 20:41:58",
+  "end": "2024-05-07 20:41:58",
+  "cost": 25, //总耗时（毫秒）
+  "data": {
+    "rows": 1 //导入总行数
+  }
+}
 ```
 
 ## 更新
@@ -66,8 +97,23 @@ java -jar dbtool-1.0.0.jar import --type oracle --host ***:*** --db orcl --user 
            --pass test                         # 密码
            
            --sql "execute sql"                 # 要执行的SQL语句
-
+           --log logfile                       # <可选> 日志JSON文件路径
+           --timestamp TS                      # <可选> 日志JSON文件中操作文本型时间戳
+           
 java -jar dbtool-1.0.0.jar exec --type oracle --host ***:*** --db orcl --user *** --pass *** --sql "update ..."
+```
+### 日志文件
+```json
+{
+  "code": 0,
+  "timestamp": "abc",
+  "start": "2024-05-07 20:41:58",
+  "end": "2024-05-07 20:41:58",
+  "cost": 25, //总耗时（毫秒）
+  "data": {
+    "rows": 1 //影响的总行数
+  }
+}
 ```
 
 ## 查看
