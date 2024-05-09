@@ -14,6 +14,8 @@ public class ComparePrimaryKeyProcessor extends Processor{
     private String argDest;
     private int argFeedback;
     private String argOutputFile;
+    private int rows = 0;
+    private int redundantRows = 0, missingRows = 0;
 
     class Lines {
         private final BufferedReader reader;
@@ -83,12 +85,16 @@ public class ComparePrimaryKeyProcessor extends Processor{
         src.close();
         dest.close();
         file.close();
+
+        printMsg(LogLevel.INFO, String.format("Total: %d rows", rows));
+        this.setResultInfo("rows", rows);
+        this.setResultInfo("missingRows", missingRows);
+        this.setResultInfo("redundantRows", redundantRows);
     }
 
     private void compareNumber(BufferedReader src, BufferedReader dest, PrintWriter file) throws IOException {
         Lines lines1 = new Lines(src);
         Lines lines2 = new Lines(dest);
-        int rows = 0;
 
         while (true) {
             String s1 = lines1.fill();
@@ -96,10 +102,12 @@ public class ComparePrimaryKeyProcessor extends Processor{
             if(s1 == null && s2 == null)
                 break;
             else if(s1 == null) {
+                redundantRows += 1;
                 file.printf("%s,-%n", s2);
                 lines2.skip();
             }
             else if(s2 == null) {
+                missingRows += 1;
                 file.printf("%s,+%n", s1);
                 lines1.skip();
             }
@@ -111,10 +119,12 @@ public class ComparePrimaryKeyProcessor extends Processor{
                     lines2.skip();
                 }
                 else if(v1 < v2) {
+                    missingRows += 1;
                     file.printf("%s,+%n", s1);
                     lines1.skip();
                 }
                 else {
+                    redundantRows += 1;
                     file.printf("%s,-%n", s2);
                     lines2.skip();
                 }
@@ -124,15 +134,11 @@ public class ComparePrimaryKeyProcessor extends Processor{
             if((rows % argFeedback) == 0)
                 printMsg(LogLevel.INFO, String.format("%d rows ...", rows));
         }
-
-        printMsg(LogLevel.INFO, String.format("Total: %d rows", rows));
-        this.setResultInfo("rows", rows);
     }
 
     private void compareString(BufferedReader src, BufferedReader dest, PrintWriter file) throws IOException {
         Lines lines1 = new Lines(src);
         Lines lines2 = new Lines(dest);
-        int rows = 0;
 
         while (true) {
             String s1 = lines1.fill();
@@ -140,10 +146,12 @@ public class ComparePrimaryKeyProcessor extends Processor{
             if(s1 == null && s2 == null)
                 break;
             else if(s1 == null) {
+                redundantRows += 1;
                 file.printf("%s,-%n", s2);
                 lines2.skip();
             }
             else if(s2 == null) {
+                missingRows += 1;
                 file.printf("%s,+%n", s1);
                 lines1.skip();
             }
@@ -153,10 +161,12 @@ public class ComparePrimaryKeyProcessor extends Processor{
                     lines2.skip();
                 }
                 else if(s1.compareTo(s2) < 0) {
+                    missingRows += 1;
                     file.printf("%s,+%n", s1);
                     lines1.skip();
                 }
                 else {
+                    redundantRows += 1;
                     file.printf("%s,-%n", s2);
                     lines2.skip();
                 }
@@ -166,8 +176,5 @@ public class ComparePrimaryKeyProcessor extends Processor{
             if((rows % argFeedback) == 0)
                 printMsg(LogLevel.INFO, String.format("%d rows ...", rows));
         }
-
-        printMsg(LogLevel.INFO, String.format("Total: %d rows", rows));
-        this.setResultInfo("rows", rows);
     }
 }
