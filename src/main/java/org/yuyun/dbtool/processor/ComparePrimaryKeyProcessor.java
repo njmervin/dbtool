@@ -75,10 +75,14 @@ public class ComparePrimaryKeyProcessor extends Processor{
 
         String flag1 = src.readLine();
         String flag2 = dest.readLine();
-        if(flag1.equals("*number") && flag1.equals(flag2))
+        if(flag1.equals("*number") && flag1.equals(flag2)) {
+            file.println("*number");
             compareNumber(src, dest, file);
-        else if(flag1.equals("*string") && flag1.equals(flag2))
+        }
+        else if(flag1.equals("*string") && flag1.equals(flag2)) {
+            file.println("*string");
             compareString(src, dest, file);
+        }
         else
             throw new RuntimeException(String.format("Primary key type is not same or unsupported: '%s' and '%s'", flag1, flag2));
 
