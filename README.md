@@ -116,6 +116,34 @@ java -jar dbtool-1.0.0.jar exec --type oracle --host ***:*** --db orcl --user **
 }
 ```
 
+## 导出主键
+```sh
+    export_pk
+           --type oracle                       # 数据库类型：oracle / mysql / postgresql
+           --jdbc jdbc                         # <可选> JDBC连接串
+           --host 127.0.0.1:1521               # 数据库地址
+           --db orcl                           # 数据库名称或Oracle服务名
+           --sid SID                           # Oracle数据库SID
+           --user test                         # 用户名
+           --pass test                         # 密码
+               
+           --table S                           #<可选>表名
+           --sql SQL                           # <可选>完整的SQL语句，不能包含排序
+           --field S                           # <可选>要导出的主键字段
+           --where S                           # <可选>导出数据的条件和排序，如果未设置，则导出所有行
+           --feedback N                        # <可选>每多少行显示进度提示，默认为10000行
+           --output destfile                   # 目标数据文件路径
+```
+
+## 比较主键文件
+```sh
+    compare_pk
+           --src S                             # 源主键文件
+           --dest S                            # 目标主键文件
+           --feedback N                        # <可选>每多少行显示进度提示，默认为10000行
+           --output S                          # 输出数据文件路径
+```
+
 ## 查看
 ```sh
      show
@@ -123,4 +151,5 @@ java -jar dbtool-1.0.0.jar exec --type oracle --host ***:*** --db orcl --user **
            --row N                             # <可选>查看第N行数据
            --feedback N                        # <可选>每多少行显示进度提示，默认为10000行
 java -jar dbtool-1.6.1.jar show --input '/data/data/raw/shuku/company_staff.20220726'
+
 ```
