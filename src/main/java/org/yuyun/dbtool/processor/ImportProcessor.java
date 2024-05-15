@@ -10,8 +10,15 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ImportProcessor extends Processor implements DataFileProcessor {
+    class FieldMapItem {
+        String  targetFieldName;
+        String  expression;
+    }
+
     private String argTableName;
     private int argLimit;
     private int argFeedback;
@@ -19,12 +26,12 @@ public class ImportProcessor extends Processor implements DataFileProcessor {
     private String argInputFile;
     private int argStart;
     private String argUpset;
-    private Map<String, String> argFieldMap;
+    private Map<String, FieldMapItem> argFieldMap;
 
-    private Map<Integer, Integer> fieldPosMap;
     private PreparedStatement ps;
     private int batch;
     private FieldType[] fieldTypes;
+    private Map<Integer, Integer> bindPosMap;
 
     @Override
     public String getActionName() {
@@ -42,6 +49,8 @@ public class ImportProcessor extends Processor implements DataFileProcessor {
      *     --fields S   <可选>字段映射，eg."name->newname,name3"。如果未设置，则按照原始列名导入所有原始列；
      *                      如果设置"name"，则导入指定的原始列；
      *                      如果设置"name->newname"，则按照新名称newname导入原始列name
+     *                      如果设置"name:expression"，expression可以含有参数#{原始字段名}
+     *                      如果设置"name->newname:expression"
      *     --limit N    <可选> 限制导入的行数，如果未设置，则导入所有行
      *     --feedback N <可选> 每多少行显示进度提示，默认为 10000
      *     --batch N    <可选> 批量提交的行数，默认为 10000
@@ -61,19 +70,33 @@ public class ImportProcessor extends Processor implements DataFileProcessor {
         this.argFieldMap = new HashMap<>();
         String as = checkOptionalArgumentString(args, "fields", null);
         if(as != null && !as.isEmpty()) {
-            for(String s1 : as.split(",")) {
+            for(String s1 : as.split(";")) {
                 s1 = s1.trim();
                 if(s1.isEmpty())
                     throw new RuntimeException(String.format("Bad field argument: %s", as));
 
-                String[] ss = s1.split("->");
-                if(ss.length == 1)
-                    this.argFieldMap.put(ss[0].toLowerCase(), ss[0]);
+                String[] ss = s1.split("->",2);
+                if(ss.length == 1) {
+                    FieldMapItem item = new FieldMapItem();
+                    String[] ss2 = ss[0].split(":", 2);
+                    item.targetFieldName = ss2[0];
+                    item.expression = ss2.length == 2 ? ss2[1].trim() : null;
+                    if(item.expression != null && item.expression.isEmpty())
+                        item.expression = null;
+                    this.argFieldMap.put(ss2[0].toLowerCase(), item);
+                }
                 else if(ss.length == 2) {
                     String k = ss[0].trim();
                     String v = ss[1].trim();
-                    if(!k.isEmpty() && !v.isEmpty())
-                        this.argFieldMap.put(k.toLowerCase(), v);
+                    if(!k.isEmpty() && !v.isEmpty()) {
+                        FieldMapItem item = new FieldMapItem();
+                        String[] ss2 = v.split(":", 2);
+                        item.targetFieldName = ss2[0];
+                        item.expression = ss2.length == 2 ? ss2[1].trim() : null;
+                        if(item.expression != null && item.expression.isEmpty())
+                            item.expression = null;
+                        this.argFieldMap.put(k.toLowerCase(), item);
+                    }
                     else
                         throw new RuntimeException(String.format("Bad field argument: %s", as));
                 }
@@ -88,12 +111,31 @@ public class ImportProcessor extends Processor implements DataFileProcessor {
         processDataFile(this.argInputFile, this, argFeedback);
     }
 
+    private static List<String> parseExpression(String exp) {
+        Pattern pattern = Pattern.compile("#\\{([a-zA-Z0-9_]+)}");
+        List<String> result = new ArrayList<>();
+        result.add(exp.replaceAll("#\\{([a-zA-Z0-9_]+)}", "?"));
+
+        for(;;) {
+            Matcher matcher = pattern.matcher(exp);
+            if(!matcher.find())
+                break;
+
+            result.add(matcher.group(1).toLowerCase());
+
+            exp = exp.substring(matcher.end());
+        }
+
+        return result;
+    }
+
     private void checkTargetFields(String[] names) throws SQLException {
-        List<String> targetFieldNames = new ArrayList<>();
-        this.fieldPosMap = new HashMap<>();
-        Map<String, String> targetFieldsMap = new HashMap<>();
-        Map<String, Integer> sourceFieldsMap = new HashMap<>();
-        List<String> targetFieldsList = new ArrayList<>();
+        List<String> targetFieldNames = new ArrayList<>(); // 最终导入表的字段名
+        List<String> targetFieldExpressions = new ArrayList<>(); //
+        Map<Integer, Integer> fieldPosMap = new HashMap<>(); // 数据文件字段位置序号 => 最终导入表的字段名序号（targetFieldNames中的位置）
+        Map<String, String> targetFieldsMap = new HashMap<>(); // 目标数据表字段名（小写）=> 目标数据表字段名
+        Map<String, Integer> sourceFieldsMap = new HashMap<>(); // 数据文件字段名（小写）=> 数据文件字段位置序号
+        List<String> targetFieldsList = new ArrayList<>(); // 目标数据表字段名（小写）
 
         //源表字段
         for(int i=0; i<names.length; i++)
@@ -116,17 +158,19 @@ public class ImportProcessor extends Processor implements DataFileProcessor {
                 if(sourceFieldsMap.containsKey(name)) {
                     fieldPosMap.put(sourceFieldsMap.get(name), targetFieldNames.size());
                     targetFieldNames.add(targetFieldsMap.get(name));
+                    targetFieldExpressions.add(null);
                 }
             }
         }
         else {
             //处理*
-            for(Map.Entry<String, String> entry : argFieldMap.entrySet()) {
+            for(Map.Entry<String, FieldMapItem> entry : argFieldMap.entrySet()) {
                 if(entry.getKey().equals("*")) {
                     for (String s : targetFieldsList) {
                         if (sourceFieldsMap.containsKey(s)) {
                             fieldPosMap.put(sourceFieldsMap.get(s), targetFieldNames.size());
                             targetFieldNames.add(targetFieldsMap.get(s));
+                            targetFieldExpressions.add(null);
                         }
                     }
                     break;
@@ -135,41 +179,68 @@ public class ImportProcessor extends Processor implements DataFileProcessor {
 
             for(String name : targetFieldsList) {
                 //处理其他
-                for(Map.Entry<String, String> entry : argFieldMap.entrySet()) {
-                    if(entry.getValue().equalsIgnoreCase(name)) {
+                for(Map.Entry<String, FieldMapItem> entry : argFieldMap.entrySet()) {
+                    if(entry.getValue().targetFieldName.equalsIgnoreCase(name)) {
                         fieldPosMap.put(sourceFieldsMap.get(entry.getKey()), targetFieldNames.size());
                         targetFieldNames.add(targetFieldsMap.get(name));
+                        targetFieldExpressions.add(entry.getValue().expression);
                         break;
                     }
                 }
             }
         }
 
+        this.bindPosMap = new HashMap<>();
         StringBuilder sb = new StringBuilder();
-        sb.append("INSERT INTO ").append(argTableName).append("(");
-        for(int i=0; i<targetFieldNames.size(); i++) {
-            if(i > 0)
-                sb.append(",");
 
+        sb.append("INSERT INTO ").append(argTableName).append("(");
+        int index = 0;
+        for(Map.Entry<Integer, Integer> entry : fieldPosMap.entrySet()) {
+            if(index > 0)
+                sb.append(",");
+            index += 1;
             if(this.getDbType().equals(DBType.MySQL))
-                sb.append("`").append(targetFieldNames.get(i)).append("`");
-            else
-                sb.append(targetFieldNames.get(i));
+                sb.append("`");
+            sb.append(targetFieldNames.get(entry.getValue()));
+            if(this.getDbType().equals(DBType.MySQL))
+                sb.append("`");
         }
         sb.append(")\nVALUES(");
-        for(int i=0; i<targetFieldNames.size(); i++) {
-            if (i > 0)
-                sb.append(",");
-            sb.append("?");
+
+        index = 0;
+        for(Map.Entry<Integer, Integer> entry : fieldPosMap.entrySet()) {
+            String exp = targetFieldExpressions.get(entry.getValue());
+            if(exp == null) {
+                if(index > 0)
+                    sb.append(",");
+                index += 1;
+                sb.append("?");
+                this.bindPosMap.put(index, entry.getKey());
+            }
+            else {
+                if(index > 0)
+                    sb.append(",");
+                List<String> list = parseExpression(exp);
+                sb.append(list.get(0));
+                for(int i=1; i<list.size(); i++) {
+                    index += 1;
+                    Integer pos = sourceFieldsMap.get(list.get(i));
+                    if(pos == null)
+                        throw new RuntimeException(String.format("Data file not contain field \"%s\"", list.get(i)));
+                    this.bindPosMap.put(index, pos);
+                }
+            }
         }
         sb.append(")");
         if(argUpset != null && !argUpset.isEmpty()) {
             if(this.getDbType().equals(DBType.PostgreSQL)) {
                 sb.append("\nON CONFLICT(").append(argUpset).append(") DO UPDATE SET ");
-                for(int i=0; i<targetFieldNames.size(); i++) {
-                    if(i > 0)
+                index = 0;
+                for(Map.Entry<Integer, Integer> entry : fieldPosMap.entrySet()) {
+                    if(index > 0)
                         sb.append(",");
-                    sb.append(String.format("%s=EXCLUDED.%s", targetFieldNames.get(i), targetFieldNames.get(i)));
+                    index += 1;
+                    sb.append(String.format("%s=EXCLUDED.%s", targetFieldNames.get(entry.getValue()), targetFieldNames.get(entry.getValue())));
                 }
             }
             else
@@ -203,54 +274,53 @@ public class ImportProcessor extends Processor implements DataFileProcessor {
         batch += 1;
 
         try {
-            for(int i=0; i<this.fieldTypes.length; i++) {
-                if(!fieldPosMap.containsKey(i))
-                    continue;
+            for(Map.Entry<Integer, Integer> entry : this.bindPosMap.entrySet()) {
+                int pos = entry.getKey();
+                int i = entry.getValue();
+
                 switch (fieldTypes[i]) {
                     case Integer:
-                        if(fields[i] == null)
-                            ps.setNull(fieldPosMap.get(i) + 1, Types.INTEGER);
+                        if (fields[i] == null)
+                            ps.setNull(pos, Types.INTEGER);
                         else
-                            ps.setInt(fieldPosMap.get(i) + 1, ((Number)fields[i]).intValue());
+                            ps.setInt(pos, ((Number) fields[i]).intValue());
                         break;
                     case Long:
-                        if(fields[i] == null)
-                            ps.setNull(fieldPosMap.get(i) + 1, Types.BIGINT);
+                        if (fields[i] == null)
+                            ps.setNull(pos, Types.BIGINT);
                         else
-                            ps.setLong(fieldPosMap.get(i) + 1, ((Number)fields[i]).longValue());
+                            ps.setLong(pos, ((Number) fields[i]).longValue());
                         break;
                     case Double:
-                        if(fields[i] == null)
-                            ps.setNull(fieldPosMap.get(i) + 1, Types.DECIMAL);
+                        if (fields[i] == null)
+                            ps.setNull(pos, Types.DECIMAL);
                         else
-                            ps.setDouble(fieldPosMap.get(i) + 1, ((Number)fields[i]).doubleValue());
+                            ps.setDouble(pos, ((Number) fields[i]).doubleValue());
                         break;
                     case SmallString:
                     case MediumString:
                     case LongString:
-                        ps.setString(fieldPosMap.get(i) + 1, (String)fields[i]);
+                        ps.setString(pos, (String) fields[i]);
                         break;
                     case Date:
-                        ps.setDate(fieldPosMap.get(i) + 1,
-                                fields[i] != null ? new java.sql.Date(((java.util.Date)fields[i]).getTime()) : null);
+                        ps.setDate(pos, fields[i] != null ? new java.sql.Date(((java.util.Date) fields[i]).getTime()) : null);
                         break;
                     case DateTime:
-                        ps.setTimestamp(fieldPosMap.get(i) + 1,
-                                fields[i] != null ? new java.sql.Timestamp(((java.util.Date)fields[i]).getTime()) : null);
+                        ps.setTimestamp(pos, fields[i] != null ? new java.sql.Timestamp(((java.util.Date) fields[i]).getTime()) : null);
                         break;
                     case SmallBinary:
                     case MediumBinary:
                     case LongBinary:
-                        if(fields[i] == null)
-                            ps.setNull(fieldPosMap.get(i) + 1, Types.VARBINARY);
+                        if (fields[i] == null)
+                            ps.setNull(pos, Types.VARBINARY);
                         else {
                             Blob blob = this.getConnection().createBlob();
-                            blob.setBytes(1, (byte[])fields[i]);
-                            ps.setBlob(fieldPosMap.get(i) + 1, blob);
+                            blob.setBytes(1, (byte[]) fields[i]);
+                            ps.setBlob(pos, blob);
                         }
                         break;
                     case Null:
-                        ps.setNull(fieldPosMap.get(i) + 1, Types.NULL);
+                        ps.setNull(pos, Types.NULL);
                         break;
                 }
             }
