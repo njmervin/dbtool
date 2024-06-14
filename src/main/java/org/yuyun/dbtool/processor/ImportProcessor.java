@@ -331,9 +331,6 @@ public class ImportProcessor extends Processor implements DataFileProcessor {
                 this.getConnection().commit();
                 batch = 0;
             }
-
-            if((row % argFeedback) == 0)
-                printMsg(LogLevel.INFO, String.format("%d rows ...", row));
         } catch (SQLException e) {
             printMsg(LogLevel.ERROR, String.format("Import failed at row #%d", row));
             printMsg(e);
