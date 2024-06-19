@@ -6,10 +6,8 @@ import org.yuyun.dbtool.FieldType;
 import org.yuyun.dbtool.LogLevel;
 
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.sql.Date;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -193,54 +191,123 @@ public class ImportProcessor extends Processor implements DataFileProcessor {
         this.bindPosMap = new HashMap<>();
         StringBuilder sb = new StringBuilder();
 
-        sb.append("INSERT INTO ").append(argTableName).append("(");
-        int index = 0;
-        for(Map.Entry<Integer, Integer> entry : fieldPosMap.entrySet()) {
-            if(index > 0)
-                sb.append(",");
-            index += 1;
-            if(this.getDbType().equals(DBType.MySQL))
-                sb.append("`");
-            sb.append(targetFieldNames.get(entry.getValue()));
-            if(this.getDbType().equals(DBType.MySQL))
-                sb.append("`");
-        }
-        sb.append(")\nVALUES(");
-
-        index = 0;
-        for(Map.Entry<Integer, Integer> entry : fieldPosMap.entrySet()) {
-            String exp = targetFieldExpressions.get(entry.getValue());
-            if(exp == null) {
-                if(index > 0)
+        if(argUpset == null || argUpset.isEmpty() || this.getDbType().equals(DBType.PostgreSQL)) {
+            sb.append("INSERT INTO ").append(argTableName).append("(");
+            int index = 0;
+            for (Map.Entry<Integer, Integer> entry : fieldPosMap.entrySet()) {
+                if (index > 0)
                     sb.append(",");
                 index += 1;
-                sb.append("?");
-                this.bindPosMap.put(index, entry.getKey());
+                if (this.getDbType().equals(DBType.MySQL))
+                    sb.append("`");
+                sb.append(targetFieldNames.get(entry.getValue()));
+                if (this.getDbType().equals(DBType.MySQL))
+                    sb.append("`");
             }
-            else {
-                if(index > 0)
-                    sb.append(",");
-                List<String> list = parseExpression(exp);
-                sb.append(list.get(0));
-                for(int i=1; i<list.size(); i++) {
+            sb.append(")\nVALUES(");
+
+            index = 0;
+            for (Map.Entry<Integer, Integer> entry : fieldPosMap.entrySet()) {
+                String exp = targetFieldExpressions.get(entry.getValue());
+                if (exp == null) {
+                    if (index > 0)
+                        sb.append(",");
                     index += 1;
-                    Integer pos = sourceFieldsMap.get(list.get(i));
-                    if(pos == null)
-                        throw new RuntimeException(String.format("Data file not contain field \"%s\"", list.get(i)));
-                    this.bindPosMap.put(index, pos);
+                    sb.append("?");
+                    this.bindPosMap.put(index, entry.getKey());
+                } else {
+                    if (index > 0)
+                        sb.append(",");
+                    List<String> list = parseExpression(exp);
+                    sb.append(list.get(0));
+                    for (int i = 1; i < list.size(); i++) {
+                        index += 1;
+                        Integer pos = sourceFieldsMap.get(list.get(i));
+                        if (pos == null)
+                            throw new RuntimeException(String.format("Data file not contain field \"%s\"", list.get(i)));
+                        this.bindPosMap.put(index, pos);
+                    }
                 }
             }
+            sb.append(")");
         }
-        sb.append(")");
+
         if(argUpset != null && !argUpset.isEmpty()) {
+            Set<String> upsetFields = new HashSet<>();
+            for(String s : argUpset.split(",")) {
+                upsetFields.add(s.toLowerCase());
+            }
+
             if(this.getDbType().equals(DBType.PostgreSQL)) {
                 sb.append("\nON CONFLICT(").append(argUpset).append(") DO UPDATE SET ");
-                index = 0;
+                int index = 0;
                 for(Map.Entry<Integer, Integer> entry : fieldPosMap.entrySet()) {
+                    if(upsetFields.contains(targetFieldNames.get(entry.getValue()).toLowerCase()))
+                        continue;
+
                     if(index > 0)
                         sb.append(",");
                     index += 1;
                     sb.append(String.format("%s=EXCLUDED.%s", targetFieldNames.get(entry.getValue()), targetFieldNames.get(entry.getValue())));
+                }
+            }
+            else if(this.getDbType().equals(DBType.Oracle)) {
+                sb.append(String.format("merge into %s dest", argTableName));
+                sb.append(" using (select ");
+                int index = 0;
+                for (Map.Entry<Integer, Integer> entry : fieldPosMap.entrySet()) {
+                    if (index > 0)
+                        sb.append(",");
+                    index += 1;
+                    sb.append("? as ");
+                    sb.append(targetFieldNames.get(entry.getValue()));
+                    this.bindPosMap.put(index, entry.getKey());
+                }
+                sb.append(" from dual) src");
+
+                sb.append(" on (");
+                String[] fields = argUpset.split(",");
+                for(int i = 0; i < fields.length; i++) {
+                    if(i > 0)
+                        sb.append(" and ");
+                    sb.append("dest.");
+                    sb.append(fields[i]);
+                    sb.append("=src.");
+                    sb.append(fields[i]);
+                }
+                sb.append(")");
+
+                sb.append(" when not matched then insert (");
+                index = 0;
+                for (Map.Entry<Integer, Integer> entry : fieldPosMap.entrySet()) {
+                    if (index > 0)
+                        sb.append(",");
+                    index += 1;
+                    sb.append("dest.").append(targetFieldNames.get(entry.getValue()));
+                }
+                sb.append(") values (");
+                index = 0;
+                for (Map.Entry<Integer, Integer> entry : fieldPosMap.entrySet()) {
+                    if (index > 0)
+                        sb.append(",");
+                    index += 1;
+                    sb.append("src.").append(targetFieldNames.get(entry.getValue()));
+                }
+                sb.append(")");
+
+                sb.append(" when matched then update set ");
+                index = 0;
+                for (Map.Entry<Integer, Integer> entry : fieldPosMap.entrySet()) {
+                    if(upsetFields.contains(targetFieldNames.get(entry.getValue()).toLowerCase()))
+                        continue;
+
+                    if (index > 0)
+                        sb.append(",");
+                    index += 1;
+                    sb.append("dest.");
+                    sb.append(targetFieldNames.get(entry.getValue()));
+                    sb.append("=src.");
+                    sb.append(targetFieldNames.get(entry.getValue()));
                 }
             }
             else
@@ -297,9 +364,7 @@ public class ImportProcessor extends Processor implements DataFileProcessor {
                         else
                             ps.setDouble(pos, ((Number) fields[i]).doubleValue());
                         break;
-                    case SmallString:
-                    case MediumString:
-                    case LongString:
+                    case String:
                         ps.setString(pos, (String) fields[i]);
                         break;
                     case Date:
@@ -308,9 +373,7 @@ public class ImportProcessor extends Processor implements DataFileProcessor {
                     case DateTime:
                         ps.setTimestamp(pos, fields[i] != null ? new java.sql.Timestamp(((java.util.Date) fields[i]).getTime()) : null);
                         break;
-                    case SmallBinary:
-                    case MediumBinary:
-                    case LongBinary:
+                    case Binary:
                         if (fields[i] == null)
                             ps.setNull(pos, Types.VARBINARY);
                         else {

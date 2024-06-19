@@ -323,7 +323,7 @@ public abstract class Processor {
         //读取ddl
         flag = (byte) in.readByte();
         if(flag == StartFlag.DDL.ordinal()) {
-            ddl = in.readString(FieldType.MediumString);
+            ddl = in.readString();
             flag = (byte) in.readByte();
         }
 
@@ -335,8 +335,8 @@ public abstract class Processor {
         //读列类型和列名
         for(int i=0; i<fieldTypes.length; i++) {
             fieldTypes[i] = FieldType.fromInt(in.readByte());
-            fieldTypeNames[i] = in.readString(FieldType.SmallString);
-            names[i] = in.readString(FieldType.SmallString);
+            fieldTypeNames[i] = in.readString();
+            names[i] = in.readString();
         }
 
         //读取总行数
@@ -402,10 +402,8 @@ public abstract class Processor {
                                     rowData[i] = fVal;
                             }
                             break;
-                        case SmallString:
-                        case MediumString:
-                        case LongString:
-                            String sVal = chunk.readString(fieldTypes[i]);
+                        case String:
+                            String sVal = chunk.readString();
                             if (rows >= startRow) {
                                 if(sVal != null) {
                                     int index = sVal.indexOf('\u0000');
@@ -425,10 +423,8 @@ public abstract class Processor {
                             if (rows >= startRow)
                                 rowData[i] = dtVal;
                             break;
-                        case SmallBinary:
-                        case MediumBinary:
-                        case LongBinary:
-                            byte[] blob = chunk.readBinary(fieldTypes[i]);
+                        case Binary:
+                            byte[] blob = chunk.readBinary();
                             if (rows >= startRow)
                                 rowData[i] = blob;
                             break;

@@ -107,7 +107,7 @@ public class ExportProcessor extends Processor{
             String ddl = getTableDDL(argTableName);
             if(ddl != null) {
                 file.writeByte((byte) StartFlag.DDL.ordinal());
-                file.writeString(FieldType.MediumString, ddl);
+                file.writeString(ddl);
             }
         }
 
@@ -182,12 +182,7 @@ public class ExportProcessor extends Processor{
                     else if (md.getColumnType(i + 1) == Types.NVARCHAR)
                         fieldTypeNames[i] = String.format("nvarchar(%d)", prec);
 
-                    if(prec <= Byte.MAX_VALUE)
-                        fieldTypes[i] = FieldType.SmallString;
-                    else if(prec <= Short.MAX_VALUE)
-                        fieldTypes[i] = FieldType.MediumString;
-                    else
-                        fieldTypes[i] = FieldType.LongString;
+                    fieldTypes[i] = FieldType.String;
                     break;
                 case Types.LONGVARCHAR:
                 case Types.CLOB:
@@ -199,7 +194,7 @@ public class ExportProcessor extends Processor{
                     else if (md.getColumnType(i + 1) == Types.NCLOB)
                         fieldTypeNames[i] = "nclob";
 
-                    fieldTypes[i] = FieldType.LongString;
+                    fieldTypes[i] = FieldType.String;
                     break;
                 case Types.DATE:
                     fieldTypeNames[i] = "date";
@@ -213,18 +208,10 @@ public class ExportProcessor extends Processor{
                     break;
                 case Types.VARBINARY:
                 case Types.ROWID:
-                    fieldTypeNames[i] = String.format("varbinary(%d)", prec);
-                    if(prec <= Byte.MAX_VALUE)
-                        fieldTypes[i] = FieldType.SmallBinary;
-                    else if(prec <= Short.MAX_VALUE)
-                        fieldTypes[i] = FieldType.MediumBinary;
-                    else
-                        fieldTypes[i] = FieldType.LongBinary;
-                    break;
                 case Types.LONGVARBINARY:
                 case Types.BLOB:
                     fieldTypeNames[i] = String.format("varbinary(%d)", prec);
-                    fieldTypes[i] = FieldType.LongBinary;
+                    fieldTypes[i] = FieldType.Binary;
                     break;
                 default:
                     throw new RuntimeException(String.format("Unsupport field '%s' data type: %d: %s", md.getColumnLabel(i + 1), md.getColumnType(i + 1), md.getColumnTypeName(i + 1)));
@@ -233,9 +220,9 @@ public class ExportProcessor extends Processor{
             //写列类型
             file.writeByte((byte) fieldTypes[i].ordinal());
             //写列类型名称
-            file.writeString(FieldType.SmallString, fieldTypeNames[i]);
+            file.writeString(fieldTypeNames[i]);
             //写列名
-            file.writeString(FieldType.SmallString, md.getColumnLabel(i + 1));
+            file.writeString(md.getColumnLabel(i + 1));
         }
 
         //准备写行数和数据量
@@ -286,10 +273,8 @@ public class ExportProcessor extends Processor{
                             chunk.writeDouble(fVal);
                         }
                         break;
-                    case SmallString:
-                    case MediumString:
-                    case LongString:
-                        chunk.writeString(fieldTypes[i], rs.getString(i + 1));
+                    case String:
+                        chunk.writeString(rs.getString(i + 1));
                         break;
                     case Date:
                         chunk.writeDate(rs.getTimestamp(i + 1));
@@ -297,10 +282,8 @@ public class ExportProcessor extends Processor{
                     case DateTime:
                         chunk.writeDateTime(rs.getTimestamp(i + 1));
                         break;
-                    case SmallBinary:
-                    case MediumBinary:
-                    case LongBinary:
-                        chunk.writeBinary(fieldTypes[i], rs.getBlob(i + 1));
+                    case Binary:
+                        chunk.writeBinary(rs.getBlob(i + 1));
                         break;
                     default:
                         assert false;

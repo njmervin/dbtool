@@ -124,9 +124,7 @@ public class ShowProcessor extends Processor implements DataFileProcessor {
                         case Double:
                             System.out.print(o);
                             break;
-                        case SmallString:
-                        case MediumString:
-                        case LongString:
+                        case String:
                             System.out.print('"');
                             System.out.print(o);
                             System.out.print('"');
@@ -137,9 +135,7 @@ public class ShowProcessor extends Processor implements DataFileProcessor {
                         case DateTime:
                             System.out.print(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format((java.util.Date)o));
                             break;
-                        case SmallBinary:
-                        case MediumBinary:
-                        case LongBinary:
+                        case Binary:
                             System.out.printf("<byte[%d]>", ((byte[]) o).length);
                             break;
                         case Null:

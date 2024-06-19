@@ -120,7 +120,7 @@ public class DataFile {
         return bb.getDouble();
     }
 
-    public void writeString(FieldType type, String value) throws IOException {
+    public void writeString(String value) throws IOException {
         bb.reset();
 
         int len = 0;
@@ -129,45 +129,19 @@ public class DataFile {
             data = value.getBytes(StandardCharsets.UTF_8);
             len = data.length;
         }
-
-        switch (type) {
-            case SmallString:
-                writeByte((byte) len);
-                break;
-            case MediumString:
-                writeShort((short) len);
-                break;
-            case LongString:
-                writeInteger(len);
-                break;
-        }
-
+        writeInteger(len);
         if(len > 0)
             out.write(data);
     }
 
-    public String readString(FieldType type) throws IOException {
+    public String readString() throws IOException {
         bb.reset();
 
-        int len = 0;
-        byte[] data = null;
-
-        switch (type) {
-            case SmallString:
-                len = readByte();
-                break;
-            case MediumString:
-                len = readShort();
-                break;
-            case LongString:
-                len = readInteger();
-                break;
-        }
-
+        int len = readInteger();
         if(len == 0)
             return null;
         else {
-            data = new byte[len];
+            byte[] data = new byte[len];
             in.readFully(data);
             return new String(data, StandardCharsets.UTF_8);
         }
@@ -207,64 +181,32 @@ public class DataFile {
             return new java.util.Date(x);
     }
 
-    public void writeBinary(FieldType type, Blob blob) throws IOException, SQLException {
+    public void writeBinary(Blob blob) throws IOException, SQLException {
         if(blob == null) {
-            switch (type) {
-                case SmallBinary:
-                    writeByte((byte) 0);
-                    break;
-                case MediumBinary:
-                    writeShort((short) 0);
-                    break;
-                case LongBinary:
-                    writeInteger(0);
-                    break;
-            }
+            writeInteger(0);
+            return;
         }
-        else {
-            InputStream is = blob.getBinaryStream();
-            int len = is.available();
-            switch (type) {
-                case SmallBinary:
-                    writeByte((byte) len);
-                    break;
-                case MediumBinary:
-                    writeShort((short) len);
-                    break;
-                case LongBinary:
-                    writeInteger(len);
-                    break;
-            }
 
-            if(len > 0) {
-                byte[] bytes = new byte[4096];
-                while(len > 0) {
-                    int n = is.read(bytes);
-                    if(n == -1)
-                        break;
-                    if(n > 0) {
-                        len -= n;
-                        out.write(bytes, 0, n);
-                    }
+        InputStream is = blob.getBinaryStream();
+        int len = is.available();
+        writeInteger(len);
+
+        if(len > 0) {
+            byte[] bytes = new byte[4096];
+            while(len > 0) {
+                int n = is.read(bytes);
+                if(n == -1)
+                    break;
+                if(n > 0) {
+                    len -= n;
+                    out.write(bytes, 0, n);
                 }
             }
         }
     }
 
-    public byte[] readBinary(FieldType type) throws IOException {
-        int len = 0;
-        switch (type) {
-            case SmallBinary:
-                len = readByte();
-                break;
-            case MediumBinary:
-                len = readShort();
-                break;
-            case LongBinary:
-                len = readInteger();
-                break;
-        }
-
+    public byte[] readBinary() throws IOException {
+        int len = readInteger();
         if(len == 0)
             return null;
 
