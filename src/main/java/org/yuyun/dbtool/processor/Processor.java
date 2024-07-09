@@ -6,6 +6,7 @@ import org.yuyun.dbtool.*;
 import org.yuyun.dbtool.db.MySQLDB;
 import org.yuyun.dbtool.db.OracleDB;
 import org.yuyun.dbtool.db.PostgreSQLDB;
+import org.yuyun.dbtool.db.SQLiteDB;
 
 import java.io.*;
 import java.lang.reflect.Modifier;
@@ -196,8 +197,8 @@ public abstract class Processor {
         //生成JDBC
         String jdbc = checkOptionalArgumentString(args, "jdbc", "");
         if(jdbc.isEmpty()) {
-            String host = checkMandatoryArgumentString(args, "host");
             if (dbType.equals(DBType.Oracle)) {
+                String host = checkMandatoryArgumentString(args, "host");
                 String db = checkOptionalArgumentString(args, "db", "");
                 String sid = checkOptionalArgumentString(args, "sid", "");
                 if (!db.isEmpty())
@@ -208,15 +209,20 @@ public abstract class Processor {
                     throw new RuntimeException("Parameter \"db\" or \"sid\" must be specified");
                 Class.forName("oracle.jdbc.OracleDriver");
             } else if (dbType.equals(DBType.MySQL)) {
+                String host = checkMandatoryArgumentString(args, "host");
                 String db = checkMandatoryArgumentString(args, "db");
                 jdbc = String.format("jdbc:mysql://%s/%s?useSSL=false&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=UTF-8&zeroDateTimeBehavior=convertToNull",
-                        args.get("host"),
-                        args.get("db"));
+                        host, db);
                 Class.forName("com.mysql.cj.jdbc.Driver");
             } else if (dbType.equals(DBType.PostgreSQL)) {
+                String host = checkMandatoryArgumentString(args, "host");
                 String db = checkMandatoryArgumentString(args, "db");
-                jdbc = String.format("jdbc:postgresql://%s/%s", args.get("host"), args.get("db"));
+                jdbc = String.format("jdbc:postgresql://%s/%s", host, db);
                 Class.forName("org.postgresql.Driver");
+            } else if (dbType.equals(DBType.SQLite)) {
+                String db = checkMandatoryArgumentString(args, "db");
+                jdbc = String.format("jdbc:sqlite://%s", db);
+                Class.forName("org.sqlite.JDBC");
             }
         }
 
@@ -228,6 +234,8 @@ public abstract class Processor {
             case PostgreSQL:
                 user = checkMandatoryArgumentString(args, "user");
                 pass = checkMandatoryArgumentString(args, "pass");
+                break;
+            case SQLite:
                 break;
         }
 
@@ -266,6 +274,8 @@ public abstract class Processor {
                 return new MySQLDB().getTableDDL(conn, tableName);
             case PostgreSQL:
                 return new PostgreSQLDB().getTableDDL(conn, tableName);
+            case SQLite:
+                return new SQLiteDB().getTableDDL(conn, tableName);
         }
         return null;
     }

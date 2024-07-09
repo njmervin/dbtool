@@ -6,7 +6,7 @@
 
     <groupId>com.etingyu</groupId>
     <artifactId>dbtool</artifactId>
-    <version>1.8.0</version>
+    <version>1.9.0</version>
 
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
@@ -32,7 +32,11 @@
             <artifactId>mysql-connector-java</artifactId>
             <version>8.0.26</version>
         </dependency>
-
+        <dependency>
+            <groupId>org.xerial</groupId>
+            <artifactId>sqlite-jdbc</artifactId>
+            <version>3.46.0.0</version>
+        </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
@@ -49,8 +53,16 @@
             <artifactId>guava</artifactId>
             <version>33.2.0-jre</version>
         </dependency>
-
-
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>1.6.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <version>1.6.1</version>
+        </dependency>
     </dependencies>
 
     <build>

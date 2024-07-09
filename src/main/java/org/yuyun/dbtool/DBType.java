@@ -4,7 +4,8 @@ public enum DBType {
     None(""),
     Oracle("Oracle"),
     MySQL("MySQL"),
-    PostgreSQL("PostgreSQL");
+    PostgreSQL("PostgreSQL"),
+    SQLite("SQLite");
 
     private final String name;
 

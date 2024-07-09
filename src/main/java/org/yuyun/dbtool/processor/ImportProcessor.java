@@ -6,7 +6,6 @@ import org.yuyun.dbtool.FieldType;
 import org.yuyun.dbtool.LogLevel;
 
 import java.sql.*;
-import java.sql.Date;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
