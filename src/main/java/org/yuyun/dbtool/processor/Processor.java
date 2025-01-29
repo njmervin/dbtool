@@ -147,6 +147,11 @@ public abstract class Processor {
             return s;
     }
 
+    protected int checkMandatoryArgumentInt(Map<String, String> args, String name) {
+        String s = checkMandatoryArgumentString(args, name);
+        return Integer.parseInt(s);
+    }
+
     /**
      * 获取参数值
      * @param args 原始参数
